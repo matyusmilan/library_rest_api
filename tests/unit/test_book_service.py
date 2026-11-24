@@ -12,31 +12,9 @@ import pytest
 from fastapi import HTTPException
 
 from app.models.book import Book
-from app.models.borrower import Borrower
 from app.schemas.book import BookCreate
 from app.services.book_service import borrow_book, create_book, list_books
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_book(**kwargs) -> Book:
-    defaults = dict(
-        id=1,
-        title="Clean Code",
-        author="Robert C. Martin",
-        isbn="978-0-13-235088-4",
-        is_borrowed=False,
-        borrower_id=None,
-    )
-    return Book(**{**defaults, **kwargs})
-
-
-def _make_borrower(**kwargs) -> Borrower:
-    defaults = dict(id=1, name="Alice", email="alice@example.com")
-    return Borrower(**{**defaults, **kwargs})
-
+from tests.unit.factories import make_book, make_borrower
 
 # ---------------------------------------------------------------------------
 # list_books
@@ -44,7 +22,7 @@ def _make_borrower(**kwargs) -> Borrower:
 
 
 def test_list_books_returns_all(mock_db):
-    books = [_make_book(id=1), _make_book(id=2, isbn="000")]
+    books = [make_book(id=1), make_book(id=2, isbn="000")]
     mock_db.query.return_value.all.return_value = books
 
     result = list_books(mock_db)
@@ -80,7 +58,7 @@ def test_create_book_success(mock_db):
 
 
 def test_create_book_duplicate_isbn_raises_409(mock_db):
-    mock_db.query.return_value.filter.return_value.first.return_value = _make_book()
+    mock_db.query.return_value.filter.return_value.first.return_value = make_book()
     data = BookCreate(title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4")
 
     with pytest.raises(HTTPException) as exc:
@@ -96,8 +74,8 @@ def test_create_book_duplicate_isbn_raises_409(mock_db):
 
 
 def test_borrow_book_success(mock_db):
-    book = _make_book()
-    borrower = _make_borrower()
+    book = make_book()
+    borrower = make_borrower()
 
     def query_side_effect(model):
         q = MagicMock()
@@ -125,7 +103,7 @@ def test_borrow_book_not_found_raises_404(mock_db):
 
 
 def test_borrow_book_already_borrowed_raises_409(mock_db):
-    book = _make_book(is_borrowed=True)
+    book = make_book(is_borrowed=True)
     mock_db.query.return_value.filter.return_value.first.return_value = book
 
     with pytest.raises(HTTPException) as exc:
@@ -135,7 +113,7 @@ def test_borrow_book_already_borrowed_raises_409(mock_db):
 
 
 def test_borrow_book_borrower_not_found_raises_404(mock_db):
-    book = _make_book()
+    book = make_book()
 
     def query_side_effect(model):
         q = MagicMock()

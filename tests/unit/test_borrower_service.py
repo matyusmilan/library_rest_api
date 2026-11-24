@@ -8,32 +8,9 @@ without any real database or network calls.
 import pytest
 from fastapi import HTTPException
 
-from app.models.book import Book
-from app.models.borrower import Borrower
 from app.schemas.borrower import BorrowerCreate
 from app.services.borrower_service import create_borrower, get_borrowed_books, get_borrower
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_borrower(**kwargs) -> Borrower:
-    defaults = dict(id=1, name="Alice", email="alice@example.com", borrowed_books=[])
-    return Borrower(**{**defaults, **kwargs})
-
-
-def _make_book(**kwargs) -> Book:
-    defaults = dict(
-        id=1,
-        title="Clean Code",
-        author="Robert C. Martin",
-        isbn="978-0-13-235088-4",
-        is_borrowed=True,
-        borrower_id=1,
-    )
-    return Book(**{**defaults, **kwargs})
-
+from tests.unit.factories import make_book, make_borrower
 
 # ---------------------------------------------------------------------------
 # create_borrower
@@ -53,7 +30,7 @@ def test_create_borrower_success(mock_db):
 
 
 def test_create_borrower_duplicate_email_raises_409(mock_db):
-    mock_db.query.return_value.filter.return_value.first.return_value = _make_borrower()
+    mock_db.query.return_value.filter.return_value.first.return_value = make_borrower()
     data = BorrowerCreate(name="Alice", email="alice@example.com")
 
     with pytest.raises(HTTPException) as exc:
@@ -69,7 +46,7 @@ def test_create_borrower_duplicate_email_raises_409(mock_db):
 
 
 def test_get_borrower_success(mock_db):
-    borrower = _make_borrower()
+    borrower = make_borrower()
     mock_db.query.return_value.filter.return_value.first.return_value = borrower
 
     result = get_borrower(mock_db, borrower_id=1)
@@ -93,8 +70,11 @@ def test_get_borrower_not_found_raises_404(mock_db):
 
 
 def test_get_borrowed_books_returns_list(mock_db):
-    books = [_make_book(), _make_book(id=2, isbn="000")]
-    borrower = _make_borrower(borrowed_books=books)
+    books = [
+        make_book(is_borrowed=True, borrower_id=1),
+        make_book(id=2, isbn="000", is_borrowed=True, borrower_id=1),
+    ]
+    borrower = make_borrower(borrowed_books=books)
     mock_db.query.return_value.filter.return_value.first.return_value = borrower
 
     result = get_borrowed_books(mock_db, borrower_id=1)
@@ -103,7 +83,7 @@ def test_get_borrowed_books_returns_list(mock_db):
 
 
 def test_get_borrowed_books_empty(mock_db):
-    borrower = _make_borrower(borrowed_books=[])
+    borrower = make_borrower(borrowed_books=[])
     mock_db.query.return_value.filter.return_value.first.return_value = borrower
 
     result = get_borrowed_books(mock_db, borrower_id=1)
