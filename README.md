@@ -31,7 +31,7 @@ uv sync --extra dev
 ## Running the application
 
 ```bash
-uv run uvicorn app.main:app --reload
+uv run uvicorn asgi:app --reload
 ```
 
 The API is available at `http://localhost:8000`.  

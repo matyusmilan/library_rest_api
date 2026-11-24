@@ -40,8 +40,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
 
-def create_app() -> FastAPI:
-    configure_otel()
+def create_app(configure_telemetry: bool = True) -> FastAPI:
+    if configure_telemetry:
+        configure_otel()
 
     app = FastAPI(
         title="Library Management System",
@@ -56,6 +57,3 @@ def create_app() -> FastAPI:
     FastAPIInstrumentor.instrument_app(app)
 
     return app
-
-
-app = create_app()

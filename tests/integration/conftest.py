@@ -8,9 +8,6 @@ development database.
 
 import pytest
 from fastapi.testclient import TestClient
-from opentelemetry import metrics, trace
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.trace import TracerProvider
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -19,18 +16,6 @@ from app.database import Base, get_db
 from app.main import create_app
 
 TEST_DATABASE_URL = "sqlite://"  # pure in-memory, no file
-
-
-@pytest.fixture(autouse=True, scope="session")
-def reset_otel():
-    """
-    Replace the global OTel providers with no-op instances for the test session.
-    This prevents the console exporters (configured for local dev) from trying
-    to write to stdout after pytest has already closed it, which would produce
-    harmless but noisy 'I/O operation on closed file' tracebacks.
-    """
-    trace.set_tracer_provider(TracerProvider())
-    metrics.set_meter_provider(MeterProvider())
 
 
 @pytest.fixture
@@ -54,7 +39,7 @@ def client() -> TestClient:
         finally:
             db.close()
 
-    app = create_app()
+    app = create_app(configure_telemetry=False)
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as c:
