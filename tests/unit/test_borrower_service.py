@@ -13,7 +13,6 @@ from app.models.borrower import Borrower
 from app.schemas.borrower import BorrowerCreate
 from app.services.borrower_service import create_borrower, get_borrowed_books, get_borrower
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -25,7 +24,14 @@ def _make_borrower(**kwargs) -> Borrower:
 
 
 def _make_book(**kwargs) -> Book:
-    defaults = dict(id=1, title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4", is_borrowed=True, borrower_id=1)
+    defaults = dict(
+        id=1,
+        title="Clean Code",
+        author="Robert C. Martin",
+        isbn="978-0-13-235088-4",
+        is_borrowed=True,
+        borrower_id=1,
+    )
     return Book(**{**defaults, **kwargs})
 
 
@@ -38,7 +44,7 @@ def test_create_borrower_success(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
     data = BorrowerCreate(name="Alice", email="alice@example.com")
 
-    result = create_borrower(mock_db, data)
+    create_borrower(mock_db, data)
 
     mock_db.add.assert_called_once()
     mock_db.commit.assert_called_once()

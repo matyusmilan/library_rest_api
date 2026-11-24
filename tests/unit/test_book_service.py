@@ -16,14 +16,20 @@ from app.models.borrower import Borrower
 from app.schemas.book import BookCreate
 from app.services.book_service import borrow_book, create_book, list_books
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def _make_book(**kwargs) -> Book:
-    defaults = dict(id=1, title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4", is_borrowed=False, borrower_id=None)
+    defaults = dict(
+        id=1,
+        title="Clean Code",
+        author="Robert C. Martin",
+        isbn="978-0-13-235088-4",
+        is_borrowed=False,
+        borrower_id=None,
+    )
     return Book(**{**defaults, **kwargs})
 
 
@@ -64,7 +70,7 @@ def test_create_book_success(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
     data = BookCreate(title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4")
 
-    result = create_book(mock_db, data)
+    create_book(mock_db, data)
 
     mock_db.add.assert_called_once()
     mock_db.commit.assert_called_once()

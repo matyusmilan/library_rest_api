@@ -30,9 +30,7 @@ def create_book(data: BookCreate, db: Session = Depends(get_db)) -> BookResponse
     response_model=BookResponse,
     summary="Borrow a book",
 )
-def borrow_book(
-    book_id: int, body: BorrowRequest, db: Session = Depends(get_db)
-) -> BookResponse:
+def borrow_book(book_id: int, body: BorrowRequest, db: Session = Depends(get_db)) -> BookResponse:
     """
     Mark a book as borrowed by a given borrower.
     Returns 404 if the book or borrower does not exist, 409 if the book is already borrowed.

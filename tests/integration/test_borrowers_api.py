@@ -7,7 +7,6 @@ using a real in-memory database, verifying all layers work together end-to-end.
 
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

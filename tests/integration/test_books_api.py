@@ -6,16 +6,18 @@ using a real in-memory database, so they verify that all layers work together
 correctly end-to-end.
 """
 
-import pytest
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 BOOK_PAYLOAD = {"title": "Clean Code", "author": "Robert C. Martin", "isbn": "978-0-13-235088-4"}
-BOOK_PAYLOAD_2 = {"title": "The Pragmatic Programmer", "author": "David Thomas", "isbn": "978-0-13-595705-9"}
+BOOK_PAYLOAD_2 = {
+    "title": "The Pragmatic Programmer",
+    "author": "David Thomas",
+    "isbn": "978-0-13-595705-9",
+}
 
 
 def _create_book(client: TestClient, payload: dict | None = None) -> dict:

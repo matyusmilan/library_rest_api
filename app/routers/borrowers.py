@@ -35,8 +35,9 @@ def get_borrower(borrower_id: int, db: Session = Depends(get_db)) -> BorrowerRes
     response_model=list[BookResponse],
     summary="List books borrowed by a borrower",
 )
-def get_borrowed_books(
-    borrower_id: int, db: Session = Depends(get_db)
-) -> list[BookResponse]:
-    """Return all books currently borrowed by the given borrower. Returns 404 if borrower not found."""
+def get_borrowed_books(borrower_id: int, db: Session = Depends(get_db)) -> list[BookResponse]:
+    """Return all books currently borrowed by the given borrower.
+
+    Returns 404 if borrower not found.
+    """
     return borrower_service.get_borrowed_books(db, borrower_id)
