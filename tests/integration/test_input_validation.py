@@ -293,3 +293,76 @@ def test_sql_injection_in_borrow_endpoint_does_not_crash(client: TestClient):
     )
     # Pydantic rejects non-integer borrower_id with 422
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# HTTP-level robustness
+#
+# These tests verify correct API behaviour for malformed or unusual HTTP
+# requests, independent of business logic. They treat the application as a
+# black box and document the current contract so regressions are caught if
+# the framework or middleware stack changes.
+# ---------------------------------------------------------------------------
+
+
+def test_missing_content_type_returns_422(client: TestClient):
+    """POST without Content-Type header should be rejected with 422."""
+    response = client.post(
+        "/books/",
+        content='{"title":"X","author":"Y","isbn":"978-0-13-235088-4"}',
+    )
+    assert response.status_code == 422
+
+
+def test_wrong_content_type_returns_422(client: TestClient):
+    """POST with Content-Type: text/plain instead of application/json returns 422."""
+    response = client.post(
+        "/books/",
+        content="title=X&author=Y",
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 422
+
+
+def test_malformed_json_unclosed_brace_returns_422(client: TestClient):
+    """JSON with an unclosed brace cannot be parsed and returns 422."""
+    response = client.post(
+        "/books/",
+        content='{"title":"X","author":"Y"',
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422
+
+
+def test_malformed_json_plain_text_returns_422(client: TestClient):
+    """Plain text sent as application/json returns 422."""
+    response = client.post(
+        "/books/",
+        content="not json at all",
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422
+
+
+def test_empty_body_returns_422(client: TestClient):
+    """An empty request body returns 422 — required fields are missing."""
+    response = client.post(
+        "/books/",
+        content="",
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422
+
+
+def test_duplicate_json_key_last_value_wins(client: TestClient):
+    """When a JSON object contains duplicate keys, Python's json parser keeps
+    the last value. This is spec-compliant behaviour (RFC 8259 leaves it
+    undefined); we document it here so the contract is explicit.
+    """
+    response = client.post(
+        "/books/",
+        content='{"title":"first","title":"last","author":"Author","isbn":"978-0-13-235088-4"}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 201
+    assert response.json()["title"] == "last"
