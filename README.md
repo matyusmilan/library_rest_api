@@ -7,7 +7,8 @@ A RESTful API for managing a library's books and borrowers, built with **FastAPI
 - **Books**: list all books, add a new book, borrow a book
 - **Borrowers**: register a borrower, retrieve borrower details, list a borrower's currently borrowed books
 - **OpenTelemetry**: a span on the borrow operation and a `books.borrowed_total` counter metric
-- **Tests**: unit tests (service layer, mocked DB) and integration tests (full HTTP stack, in-memory SQLite)
+- **Tests**: unit tests (service layer, mocked DB), integration tests (full HTTP stack, in-memory SQLite), and security/boundary tests (input validation, SQL injection resistance, HTTP robustness)
+- **Static security analysis**: Bandit scans the application code on every CI run
 
 ## Requirements
 
@@ -92,6 +93,21 @@ uv run pytest tests/integration/ -v
 uv run pytest --cov=app --cov-report=term-missing
 ```
 
+## Security analysis
+
+```bash
+# Static analysis with Bandit (checks for common security issues)
+uv run bandit -r app/ -c pyproject.toml
+```
+
+Bandit scans the `app/` directory for common security issues (hardcoded credentials, insecure functions, SQL injection patterns, etc.). It runs automatically in CI on every push and PR.
+
+The integration tests also include a dedicated security suite (`tests/integration/test_input_validation.py`) covering:
+- Input boundary validation (min/max length, field constraints)
+- ISBN format validation (ISBN-10 and ISBN-13)
+- SQL injection resistance (tautology, stacked queries, UNION-based payloads)
+- HTTP robustness (missing/wrong Content-Type, malformed JSON, empty body)
+
 ## Linting and formatting
 
 ```bash
@@ -129,7 +145,7 @@ library/
 │   └── integration/         # End-to-end HTTP tests with in-memory SQLite
 ├── .github/workflows/
 │   ├── ci.yml               # Run tests on every push/PR
-│   └── lint.yml             # Ruff lint and format check
+│   └── lint.yml             # Ruff lint, format check, and Bandit security scan
 ├── pyproject.toml           # Dependencies, Ruff config, pytest config
 └── uv.lock                  # Locked dependency versions
 ```
