@@ -20,6 +20,7 @@ dev = [
     "httpx==0.28.0",
     "ruff==0.8.2",
     "httpx2==2.16.2",
+    "bandit>=1.9.4",
 ]
 
 [tool.ruff]
@@ -48,3 +49,9 @@ python_functions = ["test_*"]
 [tool.coverage.run]
 source = ["app"]
 omit = ["tests/*"]
+
+[tool.bandit]
+targets = ["app"]
+severity = "low"    # report all severities
+confidence = "low"  # report all confidence levels
+exclude_dirs = ["tests", ".venv"]
