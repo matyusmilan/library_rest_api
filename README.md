@@ -93,6 +93,8 @@ uv run pytest tests/integration/ -v
 uv run pytest --cov=app --cov-report=term-missing
 ```
 
+For a full description of every test case see [TESTING.md](TESTING.md).
+
 ## Security analysis
 
 ```bash
