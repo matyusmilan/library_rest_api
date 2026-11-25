@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 VALID_BOOK = {
     "title": "Clean Code",
     "author": "Robert C. Martin",
-    "isbn": "978-0135888-4",  # 14 chars — well within 10–20
+    "isbn": "978-0-13-235088-4",  # valid ISBN-13
 }
 
 VALID_BORROWER = {"name": "Alice", "email": "alice@example.com"}
@@ -67,7 +67,7 @@ def test_book_author_empty_string_returns_422(client: TestClient):
 
 
 def test_book_author_at_max_length_returns_201(client: TestClient):
-    payload = {**VALID_BOOK, "author": "B" * 255, "isbn": "1234567890"}
+    payload = {**VALID_BOOK, "author": "B" * 255, "isbn": "0306406152"}
     assert client.post("/books/", json=payload).status_code == 201
 
 
@@ -77,31 +77,67 @@ def test_book_author_exceeds_max_length_returns_422(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
-# BookCreate – isbn boundaries
+# BookCreate – isbn format validation
 # ---------------------------------------------------------------------------
 
 
-def test_book_isbn_too_short_returns_422(client: TestClient):
-    # 9 characters — below the minimum of 10
-    payload = {**VALID_BOOK, "isbn": "123456789"}
+def test_book_isbn10_compact_valid(client: TestClient):
+    # compact ISBN-10 without hyphens
+    payload = {**VALID_BOOK, "isbn": "0306406152", "title": "ISBN-10 compact"}
+    assert client.post("/books/", json=payload).status_code == 201
+
+
+def test_book_isbn10_hyphenated_valid(client: TestClient):
+    payload = {**VALID_BOOK, "isbn": "0-306-40615-2", "title": "ISBN-10 hyphenated"}
+    assert client.post("/books/", json=payload).status_code == 201
+
+
+def test_book_isbn10_with_x_check_digit_valid(client: TestClient):
+    # X is a valid check digit for ISBN-10
+    payload = {**VALID_BOOK, "isbn": "0-306-40615-X", "title": "ISBN-10 X check"}
+    assert client.post("/books/", json=payload).status_code == 201
+
+
+def test_book_isbn13_compact_valid(client: TestClient):
+    payload = {**VALID_BOOK, "isbn": "9780306406157", "title": "ISBN-13 compact"}
+    assert client.post("/books/", json=payload).status_code == 201
+
+
+def test_book_isbn13_hyphenated_valid(client: TestClient):
+    payload = {**VALID_BOOK, "isbn": "978-0-306-40615-7", "title": "ISBN-13 hyphenated"}
+    assert client.post("/books/", json=payload).status_code == 201
+
+
+def test_book_isbn13_979_prefix_valid(client: TestClient):
+    # ISBN-13 can start with 979 as well as 978
+    payload = {**VALID_BOOK, "isbn": "9790306406157", "title": "ISBN-13 979 prefix"}
+    assert client.post("/books/", json=payload).status_code == 201
+
+
+def test_book_isbn_random_string_returns_422(client: TestClient):
+    payload = {**VALID_BOOK, "isbn": "notanisbn"}
     assert client.post("/books/", json=payload).status_code == 422
 
 
-def test_book_isbn_at_min_length_returns_201(client: TestClient):
-    # exactly 10 characters
-    payload = {**VALID_BOOK, "isbn": "1234567890"}
-    assert client.post("/books/", json=payload).status_code == 201
+def test_book_isbn_all_letters_returns_422(client: TestClient):
+    payload = {**VALID_BOOK, "isbn": "ABCDEFGHIJ"}
+    assert client.post("/books/", json=payload).status_code == 422
 
 
-def test_book_isbn_at_max_length_returns_201(client: TestClient):
-    # exactly 20 characters
-    payload = {**VALID_BOOK, "isbn": "1" * 20, "title": "Max ISBN Book"}
-    assert client.post("/books/", json=payload).status_code == 201
+def test_book_isbn_wrong_length_digits_returns_422(client: TestClient):
+    # 11 digits — not a valid ISBN-10 or ISBN-13 length
+    payload = {**VALID_BOOK, "isbn": "12345678901"}
+    assert client.post("/books/", json=payload).status_code == 422
 
 
-def test_book_isbn_exceeds_max_length_returns_422(client: TestClient):
-    # 21 characters — above the maximum of 20
-    payload = {**VALID_BOOK, "isbn": "1" * 21}
+def test_book_isbn13_wrong_prefix_returns_422(client: TestClient):
+    # ISBN-13 must start with 978 or 979; 977 is invalid
+    payload = {**VALID_BOOK, "isbn": "9770306406157"}
+    assert client.post("/books/", json=payload).status_code == 422
+
+
+def test_book_isbn_special_characters_returns_422(client: TestClient):
+    payload = {**VALID_BOOK, "isbn": "!@#$%^&*()"}
     assert client.post("/books/", json=payload).status_code == 422
 
 
@@ -116,13 +152,13 @@ def test_borrow_borrower_id_zero_returns_422(client: TestClient):
 
 
 def test_borrow_borrower_id_negative_returns_422(client: TestClient):
-    book = _create_book(client, {**VALID_BOOK, "isbn": "9999999999"})
+    book = _create_book(client, {**VALID_BOOK, "isbn": "0-306-40615-2", "title": "Borrow neg test"})
     assert client.post(f"/books/{book['id']}/borrow", json={"borrower_id": -1}).status_code == 422
 
 
 def test_borrow_borrower_id_one_is_valid_gt_constraint(client: TestClient):
     # borrower_id=1 satisfies gt=0; borrower doesn't exist → 404, not 422
-    book = _create_book(client, {**VALID_BOOK, "isbn": "8888888888"})
+    book = _create_book(client, {**VALID_BOOK, "isbn": "9780306406157", "title": "Borrow gt test"})
     assert client.post(f"/books/{book['id']}/borrow", json={"borrower_id": 1}).status_code == 404
 
 
