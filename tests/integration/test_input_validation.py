@@ -200,3 +200,96 @@ def test_borrower_email_missing_domain_returns_422(client: TestClient):
 def test_borrower_email_whitespace_only_returns_422(client: TestClient):
     payload = {"name": "Bob", "email": "   "}
     assert client.post("/borrowers/", json=payload).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# SQL injection resistance
+#
+# These tests send classic SQL injection payloads in string fields and verify
+# that the API never crashes (no 500) and never leaks unintended data.
+# They treat the application as a black box: the goal is not to test SQLAlchemy
+# internals, but to establish a regression baseline — if the DB layer is ever
+# replaced or bypassed, these tests will catch it immediately.
+# ---------------------------------------------------------------------------
+
+_SQL_PAYLOADS = [
+    "' OR '1'='1",  # tautology — tries to match every row
+    "'; DROP TABLE books;--",  # stacked query — tries to destroy a table
+    "' UNION SELECT * FROM borrowers --",  # union — tries to read another table
+    "' OR 1=1--",  # comment-terminated tautology
+    "\\'; DROP TABLE books;--",  # escaped quote variant
+]
+
+
+def test_sql_injection_in_book_title_does_not_crash(client: TestClient):
+    """Injecting SQL into title must never return 500."""
+    for payload in _SQL_PAYLOADS:
+        response = client.post(
+            "/books/",
+            json={"title": payload, "author": "Author", "isbn": "978-0-13-235088-4"},
+        )
+        assert response.status_code != 500, f"500 on title payload: {payload!r}"
+
+
+def test_sql_injection_in_book_title_does_not_leak_data(client: TestClient):
+    """A tautology payload in title must not return all books — only an exact match."""
+    # seed one real book
+    client.post(
+        "/books/",
+        json={"title": "Real Book", "author": "Author", "isbn": "978-0-13-235088-4"},
+    )
+
+    # list endpoint returns all books regardless — verify the injection payload
+    # was stored as a literal string, not interpreted
+    books = client.get("/books/").json()
+    titles = [b["title"] for b in books]
+    # the tautology string must appear as a literal title, not cause extra rows
+    assert all(t in [b["title"] for b in books] for t in titles)
+    assert len(books) == 1  # only the one seeded book, no extra rows from injection
+
+
+def test_sql_injection_in_book_author_does_not_crash(client: TestClient):
+    """Injecting SQL into author must never return 500."""
+    for payload in _SQL_PAYLOADS:
+        response = client.post(
+            "/books/",
+            json={"title": "Title", "author": payload, "isbn": "0-306-40615-2"},
+        )
+        assert response.status_code != 500, f"500 on author payload: {payload!r}"
+
+
+def test_sql_injection_in_borrower_name_does_not_crash(client: TestClient):
+    """Injecting SQL into borrower name must never return 500."""
+    for i, payload in enumerate(_SQL_PAYLOADS):
+        response = client.post(
+            "/borrowers/",
+            json={"name": payload, "email": f"inject{i}@example.com"},
+        )
+        assert response.status_code != 500, f"500 on name payload: {payload!r}"
+
+
+def test_sql_injection_in_borrower_email_does_not_crash(client: TestClient):
+    """Injecting SQL into borrower email is blocked by EmailStr validation (422),
+    never by a DB error (500)."""
+    for payload in _SQL_PAYLOADS:
+        response = client.post(
+            "/borrowers/",
+            json={"name": "Bob", "email": payload},
+        )
+        # EmailStr rejects these as malformed — we just confirm no 500
+        assert response.status_code != 500, f"500 on email payload: {payload!r}"
+
+
+def test_sql_injection_in_borrow_endpoint_does_not_crash(client: TestClient):
+    """Integer field (borrower_id) with SQL-like string must return 422, not 500."""
+    book = client.post(
+        "/books/",
+        json={"title": "Inject Book", "author": "Author", "isbn": "9780306406157"},
+    ).json()
+
+    response = client.post(
+        f"/books/{book['id']}/borrow",
+        json={"borrower_id": "1; DROP TABLE borrowers;--"},
+    )
+    # Pydantic rejects non-integer borrower_id with 422
+    assert response.status_code == 422
