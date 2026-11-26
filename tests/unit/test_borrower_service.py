@@ -6,8 +6,8 @@ without any real database or network calls.
 """
 
 import pytest
-from fastapi import HTTPException
 
+from app.exceptions import BorrowerNotFoundError, DuplicateEmailError
 from app.schemas.borrower import BorrowerCreate
 from app.services.borrower_service import create_borrower, get_borrowed_books, get_borrower
 from tests.unit.factories import make_book, make_borrower
@@ -29,14 +29,13 @@ def test_create_borrower_success(mock_db):
     assert added.email == "alice@example.com"
 
 
-def test_create_borrower_duplicate_email_raises_409(mock_db):
+def test_create_borrower_duplicate_email_raises_conflict(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = make_borrower()
     data = BorrowerCreate(name="Alice", email="alice@example.com")
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(DuplicateEmailError):
         create_borrower(mock_db, data)
 
-    assert exc.value.status_code == 409
     mock_db.add.assert_not_called()
 
 
@@ -55,13 +54,11 @@ def test_get_borrower_success(mock_db):
     assert result.name == "Alice"
 
 
-def test_get_borrower_not_found_raises_404(mock_db):
+def test_get_borrower_not_found_raises_not_found(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(BorrowerNotFoundError):
         get_borrower(mock_db, borrower_id=99)
-
-    assert exc.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -91,10 +88,8 @@ def test_get_borrowed_books_empty(mock_db):
     assert result == []
 
 
-def test_get_borrowed_books_borrower_not_found_raises_404(mock_db):
+def test_get_borrowed_books_borrower_not_found_raises_not_found(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(BorrowerNotFoundError):
         get_borrowed_books(mock_db, borrower_id=99)
-
-    assert exc.value.status_code == 404

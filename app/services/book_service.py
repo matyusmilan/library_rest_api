@@ -1,7 +1,12 @@
-from fastapi import HTTPException, status
 from opentelemetry import metrics, trace
 from sqlalchemy.orm import Session
 
+from app.exceptions import (
+    BookAlreadyBorrowedError,
+    BookNotFoundError,
+    BorrowerNotFoundError,
+    DuplicateIsbnError,
+)
 from app.models.book import Book
 from app.models.borrower import Borrower
 from app.schemas.book import BookCreate
@@ -25,13 +30,10 @@ def list_books(db: Session) -> list[Book]:
 
 
 def create_book(db: Session, data: BookCreate) -> Book:
-    """Add a new book. Raises 409 if ISBN already exists."""
+    """Add a new book. Raises DuplicateIsbnError if the ISBN exists."""
     existing = db.query(Book).filter(Book.isbn == data.isbn).first()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"A book with ISBN '{data.isbn}' already exists.",
-        )
+        raise DuplicateIsbnError(data.isbn)
     book = Book(title=data.title, author=data.author, isbn=data.isbn)
     db.add(book)
     db.commit()
@@ -54,25 +56,16 @@ def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
         book = db.query(Book).filter(Book.id == book_id).first()
         if not book:
             span.set_attribute("error", True)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Book with id {book_id} not found.",
-            )
+            raise BookNotFoundError(book_id)
 
         if book.is_borrowed:
             span.set_attribute("error", True)
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Book with id {book_id} is already borrowed.",
-            )
+            raise BookAlreadyBorrowedError(book_id)
 
         borrower = db.query(Borrower).filter(Borrower.id == borrower_id).first()
         if not borrower:
             span.set_attribute("error", True)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Borrower with id {borrower_id} not found.",
-            )
+            raise BorrowerNotFoundError(borrower_id)
 
         book.is_borrowed = True
         book.borrower_id = borrower_id

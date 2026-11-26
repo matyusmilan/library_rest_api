@@ -9,8 +9,13 @@ business-logic branch.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
 
+from app.exceptions import (
+    BookAlreadyBorrowedError,
+    BookNotFoundError,
+    BorrowerNotFoundError,
+    DuplicateIsbnError,
+)
 from app.models.book import Book
 from app.schemas.book import BookCreate
 from app.services.book_service import borrow_book, create_book, list_books
@@ -57,14 +62,13 @@ def test_create_book_success(mock_db):
     assert added_book.isbn == data.isbn
 
 
-def test_create_book_duplicate_isbn_raises_409(mock_db):
+def test_create_book_duplicate_isbn_raises_conflict(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = make_book()
     data = BookCreate(title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4")
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(DuplicateIsbnError):
         create_book(mock_db, data)
 
-    assert exc.value.status_code == 409
     mock_db.add.assert_not_called()
 
 
@@ -93,26 +97,22 @@ def test_borrow_book_success(mock_db):
     mock_counter.add.assert_called_once()
 
 
-def test_borrow_book_not_found_raises_404(mock_db):
+def test_borrow_book_not_found_raises_not_found(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = None
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(BookNotFoundError):
         borrow_book(mock_db, book_id=99, borrower_id=1)
 
-    assert exc.value.status_code == 404
 
-
-def test_borrow_book_already_borrowed_raises_409(mock_db):
+def test_borrow_book_already_borrowed_raises_conflict(mock_db):
     book = make_book(is_borrowed=True)
     mock_db.query.return_value.filter.return_value.first.return_value = book
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(BookAlreadyBorrowedError):
         borrow_book(mock_db, book_id=1, borrower_id=1)
 
-    assert exc.value.status_code == 409
 
-
-def test_borrow_book_borrower_not_found_raises_404(mock_db):
+def test_borrow_book_borrower_not_found_raises_not_found(mock_db):
     book = make_book()
 
     def query_side_effect(model):
@@ -122,7 +122,5 @@ def test_borrow_book_borrower_not_found_raises_404(mock_db):
 
     mock_db.query.side_effect = query_side_effect
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(BorrowerNotFoundError):
         borrow_book(mock_db, book_id=1, borrower_id=99)
-
-    assert exc.value.status_code == 404
