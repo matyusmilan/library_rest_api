@@ -10,6 +10,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 from app.database import Base, engine
+from app.error_handlers import register_error_handlers
 from app.routers import books, borrowers
 
 
@@ -53,6 +54,7 @@ def create_app(configure_telemetry: bool = True) -> FastAPI:
 
     app.include_router(books.router)
     app.include_router(borrowers.router)
+    register_error_handlers(app)
 
     FastAPIInstrumentor.instrument_app(app)
 
