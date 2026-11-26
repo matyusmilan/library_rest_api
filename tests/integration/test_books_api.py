@@ -106,6 +106,14 @@ def test_create_book_with_multiple_copies_makes_all_available(client: TestClient
     assert body["available_copies"] == 5
 
 
+def test_create_book_sets_location_header_to_the_new_book(client: TestClient):
+    response = client.post("/books/", json=BOOK_PAYLOAD)
+
+    location = response.headers["Location"]
+    assert location == f"/books/{response.json()['id']}"
+    assert client.get(location).json() == response.json()
+
+
 def test_create_book_duplicate_isbn_returns_409(client: TestClient):
     _create_book(client)
 

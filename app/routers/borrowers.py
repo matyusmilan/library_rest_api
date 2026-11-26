@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -24,9 +24,18 @@ def list_borrowers(
     status_code=status.HTTP_201_CREATED,
     summary="Register a new borrower",
 )
-def create_borrower(data: BorrowerCreate, db: Session = Depends(get_db)) -> BorrowerResponse:
-    """Register a new borrower. Returns 409 if the email is already in use."""
-    return borrower_service.create_borrower(db, data)
+def create_borrower(
+    data: BorrowerCreate, request: Request, response: Response, db: Session = Depends(get_db)
+) -> BorrowerResponse:
+    """Register a new borrower. Returns 409 if the email is already in use.
+
+    The `Location` header points to the new borrower.
+    """
+    borrower = borrower_service.create_borrower(db, data)
+    response.headers["Location"] = str(
+        request.app.url_path_for("get_borrower", borrower_id=borrower.id)
+    )
+    return borrower
 
 
 @router.get(

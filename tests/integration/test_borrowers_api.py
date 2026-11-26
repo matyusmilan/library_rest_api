@@ -42,6 +42,14 @@ def test_create_borrower_returns_201_with_borrower(client: TestClient):
     assert "id" in body
 
 
+def test_create_borrower_sets_location_header_to_the_new_borrower(client: TestClient):
+    response = client.post("/borrowers/", json=BORROWER_PAYLOAD)
+
+    location = response.headers["Location"]
+    assert location == f"/borrowers/{response.json()['id']}"
+    assert client.get(location).json() == response.json()
+
+
 def test_create_borrower_duplicate_email_returns_409(client: TestClient):
     _create_borrower(client)
 

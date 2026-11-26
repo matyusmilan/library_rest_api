@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -47,9 +47,16 @@ def get_book(book_id: int, db: Session = Depends(get_db)) -> BookResponse:
     status_code=status.HTTP_201_CREATED,
     summary="Add a new book",
 )
-def create_book(data: BookCreate, db: Session = Depends(get_db)) -> BookResponse:
-    """Add a new book to the library. Returns 409 if the ISBN already exists."""
-    return book_service.create_book(db, data)
+def create_book(
+    data: BookCreate, request: Request, response: Response, db: Session = Depends(get_db)
+) -> BookResponse:
+    """Add a new book to the library. Returns 409 if the ISBN already exists.
+
+    The `Location` header points to the new book.
+    """
+    book = book_service.create_book(db, data)
+    response.headers["Location"] = str(request.app.url_path_for("get_book", book_id=book.id))
+    return book
 
 
 @router.post(
