@@ -11,10 +11,11 @@ from app.exceptions import (
     DuplicateIsbnError,
     LoanNotFoundError,
     NoCopiesAvailableError,
+    TotalCopiesBelowLoansError,
 )
 from app.models.book import Book
 from app.models.loan import Loan
-from app.schemas.book import BookCreate
+from app.schemas.book import BookCreate, BookUpdate
 from app.services.borrower_service import get_borrower
 
 tracer = trace.get_tracer(__name__)
@@ -44,11 +45,18 @@ def list_available_books(db: Session, limit: int, offset: int) -> list[Book]:
     return _page(db.query(Book).filter(Book.available_copies > 0), limit, offset)
 
 
+def _ensure_isbn_free(db: Session, isbn: str, owner_id: int | None = None) -> None:
+    """Raise DuplicateIsbnError if another book (not `owner_id`) already has this ISBN."""
+    query = db.query(Book).filter(Book.isbn == isbn)
+    if owner_id is not None:
+        query = query.filter(Book.id != owner_id)
+    if query.first() is not None:
+        raise DuplicateIsbnError(isbn)
+
+
 def create_book(db: Session, data: BookCreate) -> Book:
     """Add a new book. Raises DuplicateIsbnError if the ISBN exists."""
-    existing = db.query(Book).filter(Book.isbn == data.isbn).first()
-    if existing:
-        raise DuplicateIsbnError(data.isbn)
+    _ensure_isbn_free(db, data.isbn)
     book = Book(
         title=data.title,
         author=data.author,
@@ -67,6 +75,47 @@ def get_book(db: Session, book_id: int) -> Book:
     book = db.query(Book).filter(Book.id == book_id).first()
     if book is None:
         raise BookNotFoundError(book_id)
+    return book
+
+
+def _set_total_copies(db: Session, book: Book, new_total: int) -> None:
+    """Resize the stock atomically; the available copies move by the same amount.
+
+    The WHERE clause refuses a total below the number of copies currently on loan.
+    """
+    on_loan = book.total_copies - book.available_copies
+    result = db.execute(
+        update(Book)
+        .where(Book.id == book.id, Book.total_copies - Book.available_copies <= new_total)
+        .values(
+            total_copies=new_total,
+            available_copies=Book.available_copies + (new_total - Book.total_copies),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount == 0:
+        db.rollback()
+        raise TotalCopiesBelowLoansError(book.id, on_loan)
+
+
+def update_book(db: Session, book_id: int, data: BookUpdate) -> Book:
+    """Apply the fields that were sent.
+
+    Raises BookNotFoundError, DuplicateIsbnError, or TotalCopiesBelowLoansError.
+    """
+    book = get_book(db, book_id)
+    changes = data.model_dump(exclude_unset=True)
+    new_total = changes.pop("total_copies", None)
+
+    if "isbn" in changes:
+        _ensure_isbn_free(db, changes["isbn"], owner_id=book_id)
+    for field, value in changes.items():
+        setattr(book, field, value)
+    if new_total is not None:
+        _set_total_copies(db, book, new_total)
+
+    db.commit()
+    db.refresh(book)
     return book
 
 

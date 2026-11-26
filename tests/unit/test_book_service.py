@@ -18,10 +18,11 @@ from app.exceptions import (
     DuplicateIsbnError,
     LoanNotFoundError,
     NoCopiesAvailableError,
+    TotalCopiesBelowLoansError,
 )
 from app.models.book import Book
 from app.models.loan import Loan
-from app.schemas.book import BookCreate
+from app.schemas.book import BookCreate, BookUpdate
 from app.services.book_service import (
     borrow_book,
     create_book,
@@ -29,6 +30,7 @@ from app.services.book_service import (
     list_available_books,
     list_books,
     return_book,
+    update_book,
 )
 from tests.unit.factories import make_book, make_borrower
 
@@ -258,3 +260,72 @@ def test_return_book_borrower_not_found_raises_not_found(mock_db):
 
     with pytest.raises(BorrowerNotFoundError):
         return_book(mock_db, book_id=1, borrower_id=99)
+
+
+# ---------------------------------------------------------------------------
+# update_book
+# ---------------------------------------------------------------------------
+
+
+def _stub_book_and_isbn_owner(mock_db, book, isbn_owner=None):
+    """get_book finds `book`; the duplicate-ISBN lookup finds `isbn_owner` (or nobody)."""
+    query = mock_db.query.return_value
+    query.filter.return_value.first.return_value = book
+    query.filter.return_value.filter.return_value.first.return_value = isbn_owner
+
+
+def test_update_book_changes_only_the_sent_fields(mock_db):
+    book = make_book(title="Old title", author="Keep me")
+    _stub_lookups(mock_db, book=book)
+
+    result = update_book(mock_db, 1, BookUpdate(title="New title"))
+
+    assert (result.title, result.author) == ("New title", "Keep me")
+    mock_db.execute.assert_not_called()  # the stock was not touched
+    mock_db.commit.assert_called_once()
+
+
+def test_update_book_isbn_owned_by_another_book_raises_conflict(mock_db):
+    _stub_book_and_isbn_owner(mock_db, make_book(), isbn_owner=make_book(id=2))
+
+    with pytest.raises(DuplicateIsbnError):
+        update_book(mock_db, 1, BookUpdate(isbn="9780306406157"))
+
+    mock_db.commit.assert_not_called()
+
+
+def test_update_book_free_isbn_is_applied(mock_db):
+    book = make_book()
+    _stub_book_and_isbn_owner(mock_db, book, isbn_owner=None)
+
+    update_book(mock_db, 1, BookUpdate(isbn="9780306406157"))
+
+    assert book.isbn == "9780306406157"
+
+
+def test_update_book_total_copies_runs_one_conditional_update(mock_db):
+    _stub_lookups(mock_db, book=make_book(total_copies=3, available_copies=1))
+    _stub_update_rowcount(mock_db, 1)
+
+    update_book(mock_db, 1, BookUpdate(total_copies=5))
+
+    mock_db.execute.assert_called_once()
+    mock_db.commit.assert_called_once()
+
+
+def test_update_book_total_copies_below_loans_raises_conflict_and_rolls_back(mock_db):
+    _stub_lookups(mock_db, book=make_book(total_copies=3, available_copies=1))
+    _stub_update_rowcount(mock_db, 0)
+
+    with pytest.raises(TotalCopiesBelowLoansError):
+        update_book(mock_db, 1, BookUpdate(title="New", total_copies=1))
+
+    mock_db.rollback.assert_called_once()  # the title change is discarded too
+    mock_db.commit.assert_not_called()
+
+
+def test_update_book_not_found_raises_not_found(mock_db):
+    _stub_lookups(mock_db, book=None)
+
+    with pytest.raises(BookNotFoundError):
+        update_book(mock_db, 99, BookUpdate(title="New"))

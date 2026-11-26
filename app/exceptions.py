@@ -49,3 +49,10 @@ class AlreadyBorrowedByBorrowerError(ConflictError):
 class LoanNotFoundError(NotFoundError):
     def __init__(self, book_id: int, borrower_id: int):
         super().__init__(f"Borrower {borrower_id} has no active loan for book {book_id}.")
+
+
+class TotalCopiesBelowLoansError(ConflictError):
+    def __init__(self, book_id: int, on_loan: int):
+        super().__init__(
+            f"Book {book_id} has {on_loan} copies on loan, so total_copies cannot be lower."
+        )

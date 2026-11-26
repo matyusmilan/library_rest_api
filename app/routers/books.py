@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.routers.pagination import Pagination, pagination
-from app.schemas.book import BookCreate, BookResponse, LoanRequest
+from app.schemas.book import BookCreate, BookResponse, BookUpdate, LoanRequest
 from app.services import book_service
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -53,6 +53,16 @@ def create_book(
     book = book_service.create_book(db, data)
     response.headers["Location"] = str(request.app.url_path_for("get_book", book_id=book.id))
     return book
+
+
+@router.patch("/{book_id}", response_model=BookResponse, summary="Update a book")
+def update_book(book_id: int, data: BookUpdate, db: Session = Depends(get_db)) -> BookResponse:
+    """Change the fields that are sent; the others stay as they are.
+
+    Returns 404 if the book does not exist. Returns 409 if the ISBN belongs to another
+    book, or if `total_copies` would drop below the number of copies currently on loan.
+    """
+    return book_service.update_book(db, book_id, data)
 
 
 @router.post(
