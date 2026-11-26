@@ -22,7 +22,7 @@ TEST_DATABASE_URL = "sqlite://"  # pure in-memory, no file
 def client() -> TestClient:
     """
     Provide a TestClient backed by a fresh in-memory SQLite database.
-    The database is created before the test and torn down after it.
+    The app's lifespan creates the tables on startup; they are dropped after the test.
     """
     engine = create_engine(
         TEST_DATABASE_URL,
@@ -30,7 +30,6 @@ def client() -> TestClient:
         poolclass=StaticPool,  # single connection shared across threads
     )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
 
     def override_get_db():
         db = TestingSessionLocal()
@@ -39,7 +38,7 @@ def client() -> TestClient:
         finally:
             db.close()
 
-    app = create_app(configure_telemetry=False)
+    app = create_app(configure_telemetry=False, db_engine=engine)
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as c:

@@ -8,6 +8,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from sqlalchemy import Engine
 
 from app.database import Base, engine
 from app.error_handlers import register_error_handlers
@@ -30,11 +31,11 @@ def configure_otel() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Create all database tables on startup."""
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=app.state.engine)
     yield
 
 
-def create_app(configure_telemetry: bool = True) -> FastAPI:
+def create_app(configure_telemetry: bool = True, db_engine: Engine | None = None) -> FastAPI:
     if configure_telemetry:
         configure_otel()
 
@@ -44,6 +45,7 @@ def create_app(configure_telemetry: bool = True) -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.engine = db_engine or engine
 
     app.include_router(books.router)
     app.include_router(borrowers.router)
