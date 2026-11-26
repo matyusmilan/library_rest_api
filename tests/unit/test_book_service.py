@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.exceptions import (
     AlreadyBorrowedByBorrowerError,
+    BookHasActiveLoansError,
     BookNotFoundError,
     BorrowerNotFoundError,
     DuplicateIsbnError,
@@ -26,6 +27,7 @@ from app.schemas.book import BookCreate, BookUpdate
 from app.services.book_service import (
     borrow_book,
     create_book,
+    delete_book,
     get_book,
     list_available_books,
     list_books,
@@ -329,3 +331,38 @@ def test_update_book_not_found_raises_not_found(mock_db):
 
     with pytest.raises(BookNotFoundError):
         update_book(mock_db, 99, BookUpdate(title="New"))
+
+
+# ---------------------------------------------------------------------------
+# delete_book
+# ---------------------------------------------------------------------------
+
+
+def test_delete_book_removes_history_then_book_and_commits(mock_db):
+    _stub_lookups(mock_db, book=make_book())
+    _stub_update_rowcount(mock_db, 1)
+
+    delete_book(mock_db, book_id=1)
+
+    assert mock_db.execute.call_count == 2  # returned loans, then the book
+    mock_db.commit.assert_called_once()
+
+
+def test_delete_book_with_copies_on_loan_raises_conflict_and_rolls_back(mock_db):
+    _stub_lookups(mock_db, book=make_book(available_copies=0))
+    _stub_update_rowcount(mock_db, 0)  # the book row is still referenced by an active loan
+
+    with pytest.raises(BookHasActiveLoansError):
+        delete_book(mock_db, book_id=1)
+
+    mock_db.rollback.assert_called_once()  # the history delete is undone as well
+    mock_db.commit.assert_not_called()
+
+
+def test_delete_book_not_found_raises_not_found(mock_db):
+    _stub_lookups(mock_db, book=None)
+
+    with pytest.raises(BookNotFoundError):
+        delete_book(mock_db, book_id=99)
+
+    mock_db.execute.assert_not_called()

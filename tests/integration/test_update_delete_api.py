@@ -129,3 +129,68 @@ def test_patch_total_copies_below_the_loans_returns_409_and_changes_nothing(clie
 
     assert response.status_code == 409
     assert _get_book(client, book["id"]) == before  # the title change was rolled back too
+
+
+# ---------------------------------------------------------------------------
+# DELETE /books/{id}
+# ---------------------------------------------------------------------------
+
+
+def test_delete_book_returns_204_and_removes_it(client: TestClient):
+    book = _create_book(client)
+
+    response = client.delete(f"/books/{book['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/books/{book['id']}").status_code == 404
+    assert client.get("/books/").json() == []
+
+
+def test_delete_unknown_book_returns_404(client: TestClient):
+    assert client.delete("/books/9999").status_code == 404
+
+
+def test_delete_book_twice_returns_404_the_second_time(client: TestClient):
+    book = _create_book(client)
+    client.delete(f"/books/{book['id']}")
+
+    assert client.delete(f"/books/{book['id']}").status_code == 404
+
+
+def test_delete_book_with_a_copy_on_loan_returns_409_and_keeps_everything(client: TestClient):
+    book = _create_book(client, copies=2)
+    borrower = _create_borrower(client)
+    _borrow(client, book["id"], borrower["id"])
+    before = _get_book(client, book["id"])
+
+    response = client.delete(f"/books/{book['id']}")
+
+    assert response.status_code == 409
+    assert _get_book(client, book["id"]) == before
+    assert [b["id"] for b in client.get(f"/borrowers/{borrower['id']}/books").json()] == [
+        book["id"]
+    ]
+
+
+def test_delete_book_after_every_copy_is_returned_succeeds(client: TestClient):
+    # Foreign keys are enforced, so a 204 also proves the loan history was removed with the book.
+    book = _create_book(client)
+    borrower = _create_borrower(client)
+    _borrow(client, book["id"], borrower["id"])
+    client.post(f"/books/{book['id']}/return", json={"borrower_id": borrower["id"]})
+
+    assert client.delete(f"/books/{book['id']}").status_code == 204
+    assert client.get(f"/borrowers/{borrower['id']}").status_code == 200
+    assert client.get(f"/borrowers/{borrower['id']}/books").json() == []
+
+
+def test_delete_book_leaves_other_loans_untouched(client: TestClient):
+    deleted, kept = _create_book(client, 1), _create_book(client, 2)
+    borrower = _create_borrower(client)
+    _borrow(client, kept["id"], borrower["id"])
+
+    assert client.delete(f"/books/{deleted['id']}").status_code == 204
+    assert [b["id"] for b in client.get(f"/borrowers/{borrower['id']}/books").json()] == [
+        kept["id"]
+    ]

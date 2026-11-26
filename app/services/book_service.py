@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 
 from opentelemetry import metrics, trace
-from sqlalchemy import update
+from sqlalchemy import delete, exists, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Query, Session
 
 from app.exceptions import (
     AlreadyBorrowedByBorrowerError,
+    BookHasActiveLoansError,
     BookNotFoundError,
     DuplicateIsbnError,
     LoanNotFoundError,
@@ -117,6 +118,31 @@ def update_book(db: Session, book_id: int, data: BookUpdate) -> Book:
     db.commit()
     db.refresh(book)
     return book
+
+
+def delete_book(db: Session, book_id: int) -> None:
+    """Delete a book together with its returned-loan history.
+
+    Raises BookNotFoundError, or BookHasActiveLoansError while any copy is on loan.
+    The returned loans go first (foreign key); after that any loan row left is an
+    active one, so the conditional DELETE of the book fails exactly when copies are out.
+    Everything runs in one transaction and is rolled back on failure.
+    """
+    get_book(db, book_id)
+    db.execute(
+        delete(Loan)
+        .where(Loan.book_id == book_id, Loan.returned_at.is_not(None))
+        .execution_options(synchronize_session=False)
+    )
+    result = db.execute(
+        delete(Book)
+        .where(Book.id == book_id, ~exists().where(Loan.book_id == Book.id))
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount == 0:
+        db.rollback()
+        raise BookHasActiveLoansError(book_id)
+    db.commit()
 
 
 def _open_loan(db: Session, book_id: int, borrower_id: int) -> None:

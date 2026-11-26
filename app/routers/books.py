@@ -65,6 +65,15 @@ def update_book(book_id: int, data: BookUpdate, db: Session = Depends(get_db)) -
     return book_service.update_book(db, book_id, data)
 
 
+@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a book")
+def delete_book(book_id: int, db: Session = Depends(get_db)) -> None:
+    """Delete a book together with its returned-loan history.
+
+    Returns 404 if the book does not exist, and 409 while any copy is on loan.
+    """
+    book_service.delete_book(db, book_id)
+
+
 @router.post(
     "/{book_id}/borrow",
     response_model=BookResponse,
