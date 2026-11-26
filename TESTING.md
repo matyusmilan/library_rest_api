@@ -1,6 +1,6 @@
 # Test Suite Documentation
 
-This document describes all 73 test cases organised by type and area.
+This document describes all 114 test cases organised by type and area.
 Run the full suite with:
 
 ```bash
@@ -24,11 +24,17 @@ real database or network is involved. They are fast and deterministic.
 | `test_list_books_returns_all` | Returns all books from the DB query |
 | `test_list_books_empty` | Returns an empty list when no books exist |
 | `test_create_book_success` | Adds a book and calls `add`, `commit`, `refresh` |
+| `test_create_book_makes_all_copies_available` | A new book starts with `available_copies == total_copies` |
 | `test_create_book_duplicate_isbn_raises_conflict` | Raises `DuplicateIsbnError` if the ISBN already exists |
-| `test_borrow_book_success` | Marks book as borrowed, links borrower, increments OTel counter |
-| `test_borrow_book_not_found_raises_not_found` | Raises `BookNotFoundError` when the book ID does not exist |
-| `test_borrow_book_already_borrowed_raises_conflict` | Raises `BookAlreadyBorrowedError` when the book is already borrowed |
-| `test_borrow_book_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
+| `test_borrow_book_success_opens_loan_and_commits` | Inserts a `Loan` for the book and borrower, commits once, increments the OTel counter |
+| `test_borrow_book_not_found_raises_not_found` | Raises `BookNotFoundError`; nothing is written |
+| `test_borrow_book_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError`; nothing is written |
+| `test_borrow_book_borrower_already_holds_copy_raises_conflict` | Raises `AlreadyBorrowedByBorrowerError` on a duplicate active loan, rolls back, takes no copy |
+| `test_borrow_book_no_copies_left_raises_conflict_and_rolls_back` | Raises `NoCopiesAvailableError`, rolls back the loan insert, does not commit or count |
+| `test_return_book_success_closes_loan_and_restores_copy` | Closes the loan and increments the available copies in one commit |
+| `test_return_book_without_active_loan_raises_not_found` | Raises `LoanNotFoundError`; the copies are not incremented |
+| `test_return_book_book_not_found_raises_not_found` | Raises `BookNotFoundError` |
+| `test_return_book_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` |
 
 ### Borrower Service (`tests/unit/test_borrower_service.py`)
 
@@ -38,8 +44,8 @@ real database or network is involved. They are fast and deterministic.
 | `test_create_borrower_duplicate_email_raises_conflict` | Raises `DuplicateEmailError` if the email already exists |
 | `test_get_borrower_success` | Returns the correct borrower by ID |
 | `test_get_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
-| `test_get_borrowed_books_returns_list` | Returns the list of books borrowed by a borrower |
-| `test_get_borrowed_books_empty` | Returns an empty list when borrower has no books |
+| `test_get_borrowed_books_returns_books_from_active_loans` | Returns the books of the borrower's active loans |
+| `test_get_borrowed_books_empty` | Returns an empty list when the borrower has no active loans |
 | `test_get_borrowed_books_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
 
 ### Database Dependency (`tests/unit/test_database.py`)
@@ -65,11 +71,14 @@ using FastAPI's `TestClient` backed by a fresh in-memory SQLite database per tes
 | `test_list_books_empty` | `GET /books/` | 200 `[]` | Empty list on fresh database |
 | `test_list_books_returns_added_books` | `GET /books/` | 200 `[…]` | Returns all added books |
 | `test_create_book_returns_201_with_book` | `POST /books/` | 201 | Response body contains correct fields |
+| `test_book_response_exposes_copy_counts_not_a_borrowed_flag` | `POST /books/` | 201 | Response has exactly `id`, `title`, `author`, `isbn`, `total_copies`, `available_copies` |
+| `test_create_book_defaults_to_single_available_copy` | `POST /books/` | 201 | Omitted `total_copies` means one copy, available |
+| `test_create_book_with_multiple_copies_makes_all_available` | `POST /books/` | 201 | `total_copies: 5` gives `available_copies: 5` |
 | `test_create_book_duplicate_isbn_returns_409` | `POST /books/` | 409 | Duplicate ISBN rejected |
 | `test_create_book_missing_field_returns_422` | `POST /books/` | 422 | Missing required field rejected |
-| `test_borrow_book_success` | `POST /books/{id}/borrow` | 200 | Book marked as borrowed, borrower linked |
+| `test_borrow_book_success` | `POST /books/{id}/borrow` | 200 | Single-copy book ends with `available_copies == 0` |
 | `test_borrow_book_not_found_returns_404` | `POST /books/{id}/borrow` | 404 | Non-existent book ID rejected |
-| `test_borrow_book_already_borrowed_returns_409` | `POST /books/{id}/borrow` | 409 | Re-borrowing a borrowed book rejected |
+| `test_borrow_book_twice_by_same_borrower_returns_409` | `POST /books/{id}/borrow` | 409 | Same borrower cannot borrow the same title twice |
 | `test_borrow_book_borrower_not_found_returns_404` | `POST /books/{id}/borrow` | 404 | Non-existent borrower ID rejected |
 
 ### Borrowers API (`tests/integration/test_borrowers_api.py`)
@@ -85,6 +94,42 @@ using FastAPI's `TestClient` backed by a fresh in-memory SQLite database per tes
 | `test_get_borrowed_books_empty` | `GET /borrowers/{id}/books` | 200 `[]` | Empty list when no books borrowed |
 | `test_get_borrowed_books_returns_borrowed_book` | `GET /borrowers/{id}/books` | 200 `[…]` | Returns the borrowed book with correct fields |
 | `test_get_borrowed_books_borrower_not_found_returns_404` | `GET /borrowers/{id}/books` | 404 | Non-existent borrower returns 404 |
+
+### Lending: copies, borrow and return (`tests/integration/test_lending_api.py`)
+
+Business rules these tests pin down (see the README for the rationale):
+a title has interchangeable copies, a borrower holds **at most one copy of a title**
+at a time, a return frees exactly one copy, and
+`available_copies == total_copies − active loans` always holds.
+
+| Test | Expected | What it verifies |
+|---|---|---|
+| `test_each_borrow_takes_one_copy` | 200, 200 | 3 copies: two borrowers leave 1 available |
+| `test_borrow_returns_409_when_all_copies_are_out` | 409 | The borrower who misses out gets no loan and no copy is taken |
+| `test_borrower_cannot_hold_two_copies_of_the_same_title` | 409 | Second borrow by the same borrower rejected, no copy consumed |
+| `test_borrower_can_hold_different_titles_at_once` | 200, 200 | The rule is per title, not per borrower |
+| `test_return_makes_the_copy_available_again` | 200 | `available_copies` restored; the borrower's list is empty |
+| `test_borrower_can_borrow_again_after_returning` | 200 | A returned loan no longer blocks a new one |
+| `test_returned_copy_can_be_borrowed_by_someone_else` | 409 → 200 | A waiting borrower succeeds after the return |
+| `test_return_without_an_active_loan_returns_404` | 404 | Nothing to return; copies unchanged |
+| `test_repeated_return_returns_404_and_does_not_inflate_copies` | 404 | A second return cannot push `available_copies` above the real number |
+| `test_return_of_unknown_book_returns_404` | 404 | Non-existent book ID |
+| `test_return_by_unknown_borrower_returns_404` | 404 | Non-existent borrower ID |
+| `test_available_copies_equals_total_minus_active_loans` | – | Invariant after several borrows and one return, checked through the API only |
+
+### Database constraints (`tests/integration/test_db_constraints.py`)
+
+These talk to an in-memory SQLite database directly. The service layer relies on
+them as the last line of defence under concurrent requests.
+
+| Test | What it verifies |
+|---|---|
+| `test_available_copies_outside_zero_to_total_is_rejected` | CHECK rejects `available > total` and `available < 0` |
+| `test_available_copies_within_zero_to_total_is_accepted` | CHECK accepts the boundaries (0, total, 1 of 1) |
+| `test_second_active_loan_for_same_book_and_borrower_is_rejected` | Partial unique index: one active loan per borrower and title |
+| `test_different_borrowers_may_hold_the_same_book` | The index does not block other borrowers |
+| `test_same_borrower_may_hold_different_books` | The index does not block other titles |
+| `test_borrower_may_borrow_again_once_the_previous_loan_is_returned` | Returned loans are outside the index |
 
 ---
 
@@ -104,6 +149,8 @@ independently of any framework or DB internals.
 | `test_book_author_empty_string_returns_422` | `author` | `""` | 422 |
 | `test_book_author_at_max_length_returns_201` | `author` | 255 chars | 201 |
 | `test_book_author_exceeds_max_length_returns_422` | `author` | 256 chars | 422 |
+| `test_book_total_copies_within_range_returns_201` | `total_copies` | `1`, `5`, `1000` | 201, value echoed back |
+| `test_book_total_copies_out_of_range_or_invalid_returns_422` | `total_copies` | `0`, `-1`, `1001`, `2.5`, `"three"`, `null` | 422 |
 
 ### Input Boundaries — Borrower fields
 
@@ -116,13 +163,14 @@ independently of any framework or DB internals.
 | `test_borrower_email_missing_domain_returns_422` | `email` | `"bob@"` | 422 |
 | `test_borrower_email_whitespace_only_returns_422` | `email` | `"   "` | 422 |
 
-### Input Boundaries — `borrower_id` constraint (`gt=0`)
+### Input Boundaries — `borrower_id` constraint (`gt=0`, borrow and return)
 
 | Test | Input | Expected | Why |
 |---|---|---|---|
 | `test_borrow_borrower_id_zero_returns_422` | `0` | 422 | Violates `gt=0` |
 | `test_borrow_borrower_id_negative_returns_422` | `-1` | 422 | Violates `gt=0` |
 | `test_borrow_borrower_id_one_is_valid_gt_constraint` | `1` | 404 | Passes `gt=0`; borrower not found is a business error, not a validation error |
+| `test_return_borrower_id_not_positive_returns_422` | `0`, `-1` | 422 | The return endpoint enforces the same constraint |
 
 ### ISBN Format Validation
 

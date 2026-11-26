@@ -4,7 +4,7 @@ A RESTful API for managing a library's books and borrowers, built with **FastAPI
 
 ## Features
 
-- **Books**: list all books, add a new book, borrow a book
+- **Books**: list all books, add a book with several copies, borrow a copy, return a copy
 - **Borrowers**: register a borrower, retrieve borrower details, list a borrower's currently borrowed books
 - **OpenTelemetry**: a span on the borrow operation and a `books.borrowed_total` counter metric
 - **Tests**: unit tests (service layer, mocked DB), integration tests (full HTTP stack, in-memory SQLite), and security/boundary tests (input validation, SQL injection resistance, HTTP robustness)
@@ -47,7 +47,8 @@ The SQLite database file (`library.db`) is created automatically in the project 
 |--------|------|-------------|
 | `GET` | `/books/` | List all books |
 | `POST` | `/books/` | Add a new book |
-| `POST` | `/books/{book_id}/borrow` | Borrow a book |
+| `POST` | `/books/{book_id}/borrow` | Borrow a copy of a book |
+| `POST` | `/books/{book_id}/return` | Return a borrowed copy |
 | `POST` | `/borrowers/` | Register a new borrower |
 | `GET` | `/borrowers/{borrower_id}` | Get borrower details |
 | `GET` | `/borrowers/{borrower_id}/books` | List borrower's borrowed books |
@@ -58,7 +59,7 @@ The SQLite database file (`library.db`) is created automatically in the project 
 ```bash
 curl -s -X POST http://localhost:8000/books/ \
   -H "Content-Type: application/json" \
-  -d '{"title": "Clean Code", "author": "Robert C. Martin", "isbn": "978-0-13-235088-4"}' | jq
+  -d '{"title": "Clean Code", "author": "Robert C. Martin", "isbn": "978-0-13-235088-4", "total_copies": 3}' | jq
 ```
 
 **Register a borrower**
@@ -75,10 +76,43 @@ curl -s -X POST http://localhost:8000/books/1/borrow \
   -d '{"borrower_id": 1}' | jq
 ```
 
+**Return a book**
+```bash
+curl -s -X POST http://localhost:8000/books/1/return \
+  -H "Content-Type: application/json" \
+  -d '{"borrower_id": 1}' | jq
+```
+
 **List books borrowed by a borrower**
 ```bash
 curl -s http://localhost:8000/borrowers/1/books | jq
 ```
+
+## Business rules
+
+A library usually owns several copies of the same book, and it does not matter which physical
+copy a reader takes. The API therefore models a **title** with a number of interchangeable copies,
+not individual copies.
+
+| Rule | Behaviour |
+|---|---|
+| Copies | `POST /books/` takes `total_copies` (1-1000, default 1). A book reports `total_copies` and `available_copies`. |
+| One copy per title per borrower | A borrower may hold **at most one copy of a given title at a time**. A second borrow of the same title returns `409`. The same borrower can borrow *different* titles, and can borrow the title again after returning it. |
+| Borrow | `404` if the book or borrower does not exist. `409` if the borrower already holds a copy, or if no copy is available. |
+| Return | Closes the borrower's active loan and frees one copy. `404` if the book, the borrower or the borrower's active loan does not exist. Returning twice returns `404`. |
+| Invariant | `available_copies == total_copies - active loans`, always. |
+| Not covered yet | Due dates and late returns. A loan records `borrowed_at` and `returned_at` only. |
+
+Borrowing and returning are atomic. A loan is stored in its own table (`loans`) and the copy
+counter is changed with a conditional `UPDATE ... WHERE available_copies > 0` in the same
+transaction, so concurrent requests cannot hand out the last copy twice. Two database
+constraints back this up: a `CHECK` that keeps `0 <= available_copies <= total_copies`, and a
+partial unique index that allows only one active loan per borrower and title.
+
+> **Upgrading from an earlier version:** the schema changed (`books.is_borrowed` and
+> `books.borrower_id` were replaced by copy counts and a `loans` table). The app creates
+> tables with `create_all` and has no migrations, so delete an old `library.db` and let the app
+> create a new one.
 
 ## Running tests
 
@@ -133,8 +167,9 @@ library/
 │   ├── exceptions.py        # Domain exceptions raised by the services
 │   ├── error_handlers.py    # Maps domain exceptions to HTTP 404/409 responses
 │   ├── models/
-│   │   ├── book.py          # Book ORM model
-│   │   └── borrower.py      # Borrower ORM model
+│   │   ├── book.py          # Book ORM model (title with total/available copies)
+│   │   ├── borrower.py      # Borrower ORM model
+│   │   └── loan.py          # Loan ORM model (one borrowed copy, active until returned)
 │   ├── schemas/
 │   │   ├── book.py          # Book Pydantic schemas
 │   │   └── borrower.py      # Borrower Pydantic schemas
@@ -160,6 +195,6 @@ The application uses console exporters by default (output visible in the termina
 
 **Instrumentation choices:**
 
-- **Span – `book.borrow`**: wraps the entire borrow operation (DB lookups + write). This is the most critical write path: it enforces business rules (book exists, not already borrowed, borrower exists) and mutates state. A span here lets you observe latency, error rate, and the specific failure mode (book not found vs. borrower not found) in your tracing backend.
+- **Span – `book.borrow`**: wraps the entire borrow operation (DB lookups + write). This is the most critical write path: it enforces business rules (book and borrower exist, the borrower does not already hold a copy, a copy is available) and mutates state. A span here lets you observe latency, error rate, and the specific failure mode in your tracing backend: a domain error marks the span as ERROR and records the exception, so "no copies left" is distinguishable from "borrower not found".
 
 - **Counter – `books.borrowed_total`**: incremented on every successful borrow. This drives inventory dashboards and capacity planning (e.g. alert if the borrow rate drops unexpectedly, indicating a service degradation rather than genuine low demand).
