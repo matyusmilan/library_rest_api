@@ -61,3 +61,8 @@ class TotalCopiesBelowLoansError(ConflictError):
 class BookHasActiveLoansError(ConflictError):
     def __init__(self, book_id: int):
         super().__init__(f"Book {book_id} cannot be deleted while copies are on loan.")
+
+
+class BorrowerHasActiveLoansError(ConflictError):
+    def __init__(self, borrower_id: int):
+        super().__init__(f"Borrower {borrower_id} cannot be deleted while holding borrowed books.")

@@ -194,3 +194,109 @@ def test_delete_book_leaves_other_loans_untouched(client: TestClient):
     assert [b["id"] for b in client.get(f"/borrowers/{borrower['id']}/books").json()] == [
         kept["id"]
     ]
+
+
+# ---------------------------------------------------------------------------
+# PATCH /borrowers/{id}
+# ---------------------------------------------------------------------------
+
+
+def test_patch_borrower_changes_only_the_sent_fields(client: TestClient):
+    borrower = _create_borrower(client)
+
+    response = client.patch(f"/borrowers/{borrower['id']}", json={"name": "New name"})
+
+    assert response.status_code == 200
+    assert response.json() == {**borrower, "name": "New name"}
+
+
+def test_patch_borrower_email_of_another_borrower_returns_409(client: TestClient):
+    first, second = _create_borrower(client, 1), _create_borrower(client, 2)
+
+    response = client.patch(f"/borrowers/{second['id']}", json={"email": first["email"]})
+
+    assert response.status_code == 409
+    assert client.get(f"/borrowers/{second['id']}").json()["email"] == second["email"]
+
+
+def test_patch_borrower_with_its_own_email_is_not_a_conflict(client: TestClient):
+    borrower = _create_borrower(client)
+
+    response = client.patch(
+        f"/borrowers/{borrower['id']}", json={"email": borrower["email"], "name": "Same email"}
+    )
+
+    assert response.status_code == 200
+
+
+def test_patch_borrower_to_a_new_email(client: TestClient):
+    borrower = _create_borrower(client)
+
+    response = client.patch(f"/borrowers/{borrower['id']}", json={"email": "new@example.com"})
+
+    assert response.json()["email"] == "new@example.com"
+
+
+@pytest.mark.parametrize(
+    "body", [{}, {"name": None}, {"email": None}, {"name": ""}, {"email": "not-an-email"}]
+)
+def test_patch_borrower_with_an_invalid_body_returns_422(client: TestClient, body: dict):
+    borrower = _create_borrower(client)
+
+    assert client.patch(f"/borrowers/{borrower['id']}", json=body).status_code == 422
+
+
+def test_patch_unknown_borrower_returns_404(client: TestClient):
+    assert client.patch("/borrowers/9999", json={"name": "x"}).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /borrowers/{id}
+# ---------------------------------------------------------------------------
+
+
+def test_delete_borrower_returns_204_and_removes_them(client: TestClient):
+    borrower = _create_borrower(client)
+
+    response = client.delete(f"/borrowers/{borrower['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/borrowers/{borrower['id']}").status_code == 404
+    assert client.get("/borrowers/").json() == []
+
+
+def test_delete_unknown_borrower_returns_404(client: TestClient):
+    assert client.delete("/borrowers/9999").status_code == 404
+
+
+def test_delete_borrower_holding_a_book_returns_409_and_keeps_the_loan(client: TestClient):
+    book = _create_book(client)
+    borrower = _create_borrower(client)
+    _borrow(client, book["id"], borrower["id"])
+
+    response = client.delete(f"/borrowers/{borrower['id']}")
+
+    assert response.status_code == 409
+    assert client.get(f"/borrowers/{borrower['id']}").status_code == 200
+    assert _get_book(client, book["id"])["available_copies"] == 0
+
+
+def test_delete_borrower_after_returning_everything_succeeds(client: TestClient):
+    # Foreign keys are enforced, so a 204 also proves the loan history was removed with them.
+    book = _create_book(client)
+    borrower = _create_borrower(client)
+    _borrow(client, book["id"], borrower["id"])
+    client.post(f"/books/{book['id']}/return", json={"borrower_id": borrower["id"]})
+
+    assert client.delete(f"/borrowers/{borrower['id']}").status_code == 204
+    assert _get_book(client, book["id"])["available_copies"] == 1
+
+
+def test_delete_borrower_leaves_other_borrowers_loans_untouched(client: TestClient):
+    book = _create_book(client, copies=2)
+    leaving, staying = _create_borrower(client, 1), _create_borrower(client, 2)
+    _borrow(client, book["id"], staying["id"])
+
+    assert client.delete(f"/borrowers/{leaving['id']}").status_code == 204
+    assert [b["id"] for b in client.get(f"/borrowers/{staying['id']}/books").json()] == [book["id"]]

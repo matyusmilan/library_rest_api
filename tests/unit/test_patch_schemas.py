@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.book import BookUpdate
+from app.schemas.borrower import BorrowerUpdate
 
 
 def test_book_update_accepts_a_single_field():
@@ -31,3 +32,20 @@ def test_book_update_rejects_a_null_field(field):
 def test_book_update_applies_the_same_field_rules_as_create(body):
     with pytest.raises(ValidationError):
         BookUpdate(**body)
+
+
+def test_borrower_update_rejects_an_empty_body():
+    with pytest.raises(ValidationError, match="At least one field"):
+        BorrowerUpdate()
+
+
+@pytest.mark.parametrize("field", ["name", "email"])
+def test_borrower_update_rejects_a_null_field(field):
+    with pytest.raises(ValidationError, match="cannot be null"):
+        BorrowerUpdate(**{field: None})
+
+
+@pytest.mark.parametrize("body", [{"name": ""}, {"name": "x" * 256}, {"email": "not-an-email"}])
+def test_borrower_update_applies_the_same_field_rules_as_create(body):
+    with pytest.raises(ValidationError):
+        BorrowerUpdate(**body)

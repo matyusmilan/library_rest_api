@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.routers.pagination import Pagination, pagination
 from app.schemas.book import BookResponse
-from app.schemas.borrower import BorrowerCreate, BorrowerResponse
+from app.schemas.borrower import BorrowerCreate, BorrowerResponse, BorrowerUpdate
 from app.services import borrower_service
 
 router = APIRouter(prefix="/borrowers", tags=["borrowers"])
@@ -46,6 +46,28 @@ def create_borrower(
 def get_borrower(borrower_id: int, db: Session = Depends(get_db)) -> BorrowerResponse:
     """Return the details of a specific borrower. Returns 404 if not found."""
     return borrower_service.get_borrower(db, borrower_id)
+
+
+@router.patch("/{borrower_id}", response_model=BorrowerResponse, summary="Update a borrower")
+def update_borrower(
+    borrower_id: int, data: BorrowerUpdate, db: Session = Depends(get_db)
+) -> BorrowerResponse:
+    """Change the fields that are sent; the others stay as they are.
+
+    Returns 404 if the borrower does not exist, and 409 if the email belongs to another borrower.
+    """
+    return borrower_service.update_borrower(db, borrower_id, data)
+
+
+@router.delete(
+    "/{borrower_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a borrower"
+)
+def delete_borrower(borrower_id: int, db: Session = Depends(get_db)) -> None:
+    """Delete a borrower together with their returned-loan history.
+
+    Returns 404 if the borrower does not exist, and 409 while they hold a borrowed book.
+    """
+    borrower_service.delete_borrower(db, borrower_id)
 
 
 @router.get(
