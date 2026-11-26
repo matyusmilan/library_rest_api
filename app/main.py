@@ -15,14 +15,7 @@ from app.routers import books, borrowers
 
 
 def configure_otel() -> None:
-    """
-    Set up OpenTelemetry tracing and metrics with console exporters.
-
-    In production this would be replaced with an OTLP exporter pointing at
-    a collector (e.g. Jaeger, Grafana Tempo, Datadog), but console exporters
-    are sufficient to demonstrate that spans and metrics are emitted correctly
-    without requiring external infrastructure for local development.
-    """
+    """Configure OpenTelemetry with console exporters; use OTLP exporters in production."""
     # Tracing
     tracer_provider = TracerProvider()
     tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))

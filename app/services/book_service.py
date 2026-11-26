@@ -24,7 +24,6 @@ books_borrowed_counter = meter.create_counter(
 
 
 def list_books(db: Session) -> list[Book]:
-    """Return all books in the library."""
     return db.query(Book).all()
 
 

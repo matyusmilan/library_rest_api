@@ -2,10 +2,7 @@ import re
 
 from pydantic import BaseModel, Field, field_validator
 
-# Matches ISBN-10 (e.g. 0-306-40615-2 or 030640615X)
-# and ISBN-13 (e.g. 978-0-306-40615-7 or 9780306406157).
-# Hyphens are stripped before matching so both hyphenated and
-# compact forms are accepted.
+# Applied after stripping hyphens and spaces, so "0-306-40615-2" and "0306406152" both pass.
 _ISBN_10_RE = re.compile(r"^\d{9}[\dX]$")
 _ISBN_13_RE = re.compile(r"^97[89]\d{10}$")
 
@@ -20,7 +17,6 @@ class BookCreate(BaseModel):
     @field_validator("isbn")
     @classmethod
     def validate_isbn(cls, value: str) -> str:
-        """Accept ISBN-10 and ISBN-13, with or without hyphens."""
         compact = value.replace("-", "").replace(" ", "")
         if _ISBN_10_RE.match(compact) or _ISBN_13_RE.match(compact):
             return value

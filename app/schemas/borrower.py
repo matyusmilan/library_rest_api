@@ -1,7 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
 
-from app.schemas.book import BookResponse
-
 
 class BorrowerCreate(BaseModel):
     """Request body for registering a new borrower."""
@@ -18,9 +16,3 @@ class BorrowerResponse(BaseModel):
     email: str
 
     model_config = {"from_attributes": True}
-
-
-class BorrowerDetailResponse(BorrowerResponse):
-    """Borrower with their currently borrowed books."""
-
-    borrowed_books: list[BookResponse] = []
