@@ -26,6 +26,7 @@ from app.services.book_service import (
     borrow_book,
     create_book,
     get_book,
+    list_available_books,
     list_books,
     return_book,
 )
@@ -36,22 +37,40 @@ from tests.unit.factories import make_book, make_borrower
 # ---------------------------------------------------------------------------
 
 
-def test_list_books_returns_all(mock_db):
-    books = [make_book(id=1), make_book(id=2, isbn="000")]
-    mock_db.query.return_value.all.return_value = books
+def _stub_page(query, books):
+    """Make query.order_by().limit().offset().all() return the given books."""
+    ordered = query.order_by.return_value
+    ordered.limit.return_value.offset.return_value.all.return_value = books
+    return ordered
 
-    result = list_books(mock_db)
+
+def test_list_books_returns_the_requested_page(mock_db):
+    books = [make_book(id=1), make_book(id=2, isbn="000")]
+    ordered = _stub_page(mock_db.query.return_value, books)
+
+    result = list_books(mock_db, limit=10, offset=20)
 
     assert result == books
     mock_db.query.assert_called_once_with(Book)
+    ordered.limit.assert_called_once_with(10)
+    ordered.limit.return_value.offset.assert_called_once_with(20)
 
 
 def test_list_books_empty(mock_db):
-    mock_db.query.return_value.all.return_value = []
+    _stub_page(mock_db.query.return_value, [])
 
-    result = list_books(mock_db)
+    assert list_books(mock_db, limit=50, offset=0) == []
 
-    assert result == []
+
+def test_list_available_books_filters_on_available_copies(mock_db):
+    books = [make_book(id=1)]
+    filtered = mock_db.query.return_value.filter.return_value
+    _stub_page(filtered, books)
+
+    result = list_available_books(mock_db, limit=50, offset=0)
+
+    assert result == books
+    mock_db.query.return_value.filter.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

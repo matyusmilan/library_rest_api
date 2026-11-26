@@ -2,16 +2,37 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.routers.pagination import Pagination, pagination
 from app.schemas.book import BookCreate, BookResponse, LoanRequest
 from app.services import book_service
 
 router = APIRouter(prefix="/books", tags=["books"])
 
 
+# `/all` and `/available` must be declared before `/{book_id}`, otherwise the
+# path parameter captures them and the request fails with 422.
 @router.get("/", response_model=list[BookResponse], summary="List all books")
-def list_books(db: Session = Depends(get_db)) -> list[BookResponse]:
-    """Return all books in the library."""
-    return book_service.list_books(db)
+@router.get("/all", response_model=list[BookResponse], summary="List all books")
+def list_books(
+    page: Pagination = Depends(pagination), db: Session = Depends(get_db)
+) -> list[BookResponse]:
+    """Return every book in the library, whether or not a copy is available.
+
+    `GET /books/` is an alias of `GET /books/all`.
+    """
+    return book_service.list_books(db, page.limit, page.offset)
+
+
+@router.get(
+    "/available",
+    response_model=list[BookResponse],
+    summary="List books that can be borrowed",
+)
+def list_available_books(
+    page: Pagination = Depends(pagination), db: Session = Depends(get_db)
+) -> list[BookResponse]:
+    """Return the books that have at least one copy available to borrow."""
+    return book_service.list_available_books(db, page.limit, page.offset)
 
 
 @router.get("/{book_id}", response_model=BookResponse, summary="Get a book by ID")

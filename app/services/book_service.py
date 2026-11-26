@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from opentelemetry import metrics, trace
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from app.exceptions import (
     AlreadyBorrowedByBorrowerError,
@@ -30,8 +30,18 @@ books_borrowed_counter = meter.create_counter(
 )
 
 
-def list_books(db: Session) -> list[Book]:
-    return db.query(Book).all()
+def _page(query: Query[Book], limit: int, offset: int) -> list[Book]:
+    # Ordering by id keeps pages stable between requests.
+    return query.order_by(Book.id).limit(limit).offset(offset).all()
+
+
+def list_books(db: Session, limit: int, offset: int) -> list[Book]:
+    return _page(db.query(Book), limit, offset)
+
+
+def list_available_books(db: Session, limit: int, offset: int) -> list[Book]:
+    """List the books that have at least one copy available to borrow."""
+    return _page(db.query(Book).filter(Book.available_copies > 0), limit, offset)
 
 
 def create_book(db: Session, data: BookCreate) -> Book:
