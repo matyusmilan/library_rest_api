@@ -209,6 +209,24 @@ def test_borrow_book_borrower_already_holds_copy_raises_conflict(mock_db):
     mock_db.commit.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "lookups, expected",
+    [
+        ([make_book(), make_borrower(), None], BookNotFoundError),
+        ([make_book(), make_borrower(), make_book(), None], BorrowerNotFoundError),
+    ],
+)
+def test_borrow_book_deleted_while_borrowing_raises_not_found(mock_db, lookups, expected):
+    # The loan insert fails on the foreign key because the book or borrower was just deleted.
+    mock_db.query.return_value.filter.return_value.first.side_effect = lookups
+    mock_db.flush.side_effect = IntegrityError("INSERT INTO loans", {}, Exception("FOREIGN KEY"))
+
+    with pytest.raises(expected):
+        borrow_book(mock_db, book_id=1, borrower_id=1)
+
+    mock_db.commit.assert_not_called()
+
+
 def test_borrow_book_no_copies_left_raises_conflict_and_rolls_back(mock_db):
     _stub_lookups(mock_db, book=make_book(available_copies=0), borrower=make_borrower())
     _stub_update_rowcount(mock_db, 0)

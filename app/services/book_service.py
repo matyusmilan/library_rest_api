@@ -152,6 +152,10 @@ def _open_loan(db: Session, book_id: int, borrower_id: int) -> None:
         db.flush()
     except IntegrityError:
         db.rollback()
+        # Either the unique index fired, or the book or borrower was deleted since we
+        # looked them up (the foreign key fired). Look again to report the right one.
+        get_book(db, book_id)
+        get_borrower(db, borrower_id)
         raise AlreadyBorrowedByBorrowerError(book_id, borrower_id) from None
 
 
