@@ -1,16 +1,15 @@
 """
-Integration tests for the list endpoints: /books/all, /books/available, /books/
-and their shared `limit` / `offset` pagination.
+Integration tests for the list endpoints and their shared `limit` / `offset` pagination.
 
-  * /books/all        every book in the library, borrowed out or not
+  * /books/           every book in the library, borrowed out or not
   * /books/available  only books with at least one copy left to borrow
-  * /books/           alias of /books/all
+  * /borrowers/       every registered borrower
 """
 
 import pytest
 from fastapi.testclient import TestClient
 
-BOOK_LISTS = ["/books/", "/books/all", "/books/available"]
+BOOK_LISTS = ["/books/", "/books/available"]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,17 +41,17 @@ def _ids(client: TestClient, url: str) -> list[int]:
 
 
 # ---------------------------------------------------------------------------
-# /books/all and /books/available
+# /books/ and /books/available
 # ---------------------------------------------------------------------------
 
 
-def test_all_lists_every_book_including_fully_borrowed_ones(client: TestClient):
+def test_books_lists_every_book_including_fully_borrowed_ones(client: TestClient):
     borrowed_out = _create_book(client, 1)
     in_stock = _create_book(client, 2)
     borrower = _create_borrower(client)
     client.post(f"/books/{borrowed_out['id']}/borrow", json={"borrower_id": borrower["id"]})
 
-    assert _ids(client, "/books/all") == [borrowed_out["id"], in_stock["id"]]
+    assert _ids(client, "/books/") == [borrowed_out["id"], in_stock["id"]]
 
 
 def test_available_excludes_books_with_no_copy_left(client: TestClient):
@@ -87,13 +86,6 @@ def test_available_is_empty_on_a_fresh_library(client: TestClient):
     assert client.get("/books/available").json() == []
 
 
-def test_books_root_is_an_alias_of_all(client: TestClient):
-    _create_book(client, 1)
-    _create_book(client, 2)
-
-    assert client.get("/books/").json() == client.get("/books/all").json()
-
-
 # ---------------------------------------------------------------------------
 # Pagination
 # ---------------------------------------------------------------------------
@@ -119,11 +111,11 @@ def test_default_page_size_is_50(client: TestClient):
     for n in range(1, 52):
         _create_book(client, n)
 
-    assert len(_ids(client, "/books/all")) == 50
+    assert len(_ids(client, "/books/")) == 50
 
 
 def test_limit_of_100_is_accepted(client: TestClient):
-    assert client.get("/books/all?limit=100").status_code == 200
+    assert client.get("/books/?limit=100").status_code == 200
 
 
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "limit=abc", "offset=-1", "offset=x"])

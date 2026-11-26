@@ -9,20 +9,16 @@ from app.services import book_service
 router = APIRouter(prefix="/books", tags=["books"])
 
 
-# `/all` and `/available` must be declared before `/{book_id}`, otherwise the
-# path parameter captures them and the request fails with 422.
 @router.get("/", response_model=list[BookResponse], summary="List all books")
-@router.get("/all", response_model=list[BookResponse], summary="List all books")
 def list_books(
     page: Pagination = Depends(pagination), db: Session = Depends(get_db)
 ) -> list[BookResponse]:
-    """Return every book in the library, whether or not a copy is available.
-
-    `GET /books/` is an alias of `GET /books/all`.
-    """
+    """Return every book in the library, whether or not a copy is available."""
     return book_service.list_books(db, page.limit, page.offset)
 
 
+# `/available` must be declared before `/{book_id}`, otherwise the path
+# parameter captures it and the request fails with 422.
 @router.get(
     "/available",
     response_model=list[BookResponse],
