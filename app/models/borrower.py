@@ -14,3 +14,5 @@ class Borrower(Base):
     borrowed_books: Mapped[list["Book"]] = relationship(  # noqa: F821
         "Book", back_populates="borrower"
     )
+
+    loans: Mapped[list["Loan"]] = relationship("Loan", back_populates="borrower")  # noqa: F821
