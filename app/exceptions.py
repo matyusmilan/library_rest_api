@@ -39,3 +39,18 @@ class DuplicateEmailError(ConflictError):
 class BookAlreadyBorrowedError(ConflictError):
     def __init__(self, book_id: int):
         super().__init__(f"Book with id {book_id} is already borrowed.")
+
+
+class NoCopiesAvailableError(ConflictError):
+    def __init__(self, book_id: int):
+        super().__init__(f"No copies of book with id {book_id} are available.")
+
+
+class AlreadyBorrowedByBorrowerError(ConflictError):
+    def __init__(self, book_id: int, borrower_id: int):
+        super().__init__(f"Borrower {borrower_id} already has a copy of book {book_id}.")
+
+
+class LoanNotFoundError(NotFoundError):
+    def __init__(self, book_id: int, borrower_id: int):
+        super().__init__(f"Borrower {borrower_id} has no active loan for book {book_id}.")
