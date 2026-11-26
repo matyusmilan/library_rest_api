@@ -22,7 +22,13 @@ from app.exceptions import (
 from app.models.book import Book
 from app.models.loan import Loan
 from app.schemas.book import BookCreate
-from app.services.book_service import borrow_book, create_book, list_books, return_book
+from app.services.book_service import (
+    borrow_book,
+    create_book,
+    get_book,
+    list_books,
+    return_book,
+)
 from tests.unit.factories import make_book, make_borrower
 
 # ---------------------------------------------------------------------------
@@ -46,6 +52,25 @@ def test_list_books_empty(mock_db):
     result = list_books(mock_db)
 
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# get_book
+# ---------------------------------------------------------------------------
+
+
+def test_get_book_returns_the_book(mock_db):
+    book = make_book(id=7)
+    mock_db.query.return_value.filter.return_value.first.return_value = book
+
+    assert get_book(mock_db, book_id=7) is book
+
+
+def test_get_book_not_found_raises_not_found(mock_db):
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+
+    with pytest.raises(BookNotFoundError):
+        get_book(mock_db, book_id=99)
 
 
 # ---------------------------------------------------------------------------

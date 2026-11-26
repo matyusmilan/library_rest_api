@@ -14,6 +14,12 @@ def list_books(db: Session = Depends(get_db)) -> list[BookResponse]:
     return book_service.list_books(db)
 
 
+@router.get("/{book_id}", response_model=BookResponse, summary="Get a book by ID")
+def get_book(book_id: int, db: Session = Depends(get_db)) -> BookResponse:
+    """Return a single book. Returns 404 if it does not exist."""
+    return book_service.get_book(db, book_id)
+
+
 @router.post(
     "/",
     response_model=BookResponse,

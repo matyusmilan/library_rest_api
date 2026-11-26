@@ -55,6 +55,24 @@ def test_list_books_returns_added_books(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
+# GET /books/{id}
+# ---------------------------------------------------------------------------
+
+
+def test_get_book_returns_the_book(client: TestClient):
+    book = _create_book(client)
+
+    response = client.get(f"/books/{book['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == book
+
+
+def test_get_book_not_found_returns_404(client: TestClient):
+    assert client.get("/books/9999").status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # POST /books/
 # ---------------------------------------------------------------------------
 

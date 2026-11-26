@@ -52,7 +52,8 @@ def create_book(db: Session, data: BookCreate) -> Book:
     return book
 
 
-def _get_book(db: Session, book_id: int) -> Book:
+def get_book(db: Session, book_id: int) -> Book:
+    """Return a book by ID. Raises BookNotFoundError if missing."""
     book = db.query(Book).filter(Book.id == book_id).first()
     if book is None:
         raise BookNotFoundError(book_id)
@@ -96,7 +97,7 @@ def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
         span.set_attribute("book.id", book_id)
         span.set_attribute("borrower.id", borrower_id)
 
-        book = _get_book(db, book_id)
+        book = get_book(db, book_id)
         get_borrower(db, borrower_id)
 
         _open_loan(db, book_id, borrower_id)
@@ -116,7 +117,7 @@ def return_book(db: Session, book_id: int, borrower_id: int) -> Book:
     Closing the loan is conditional on it still being active, so a repeated
     return fails instead of incrementing the available copies twice.
     """
-    book = _get_book(db, book_id)
+    book = get_book(db, book_id)
     get_borrower(db, borrower_id)
 
     closed = db.execute(
