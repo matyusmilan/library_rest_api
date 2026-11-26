@@ -49,6 +49,10 @@ python_functions = ["test_*"]
 [tool.coverage.run]
 source = ["app"]
 omit = ["tests/*"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
 
 [tool.bandit]
 targets = ["app"]
