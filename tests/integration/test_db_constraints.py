@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import Book, Loan
+from app.models import Book, Borrower, Loan
 
 
 @pytest.fixture
@@ -29,14 +29,30 @@ def db_session():
         yield session
 
 
-def _book(total: int, available: int) -> Book:
-    return Book(
-        title="Clean Code",
-        author="Robert C. Martin",
-        isbn="978-0-13-235088-4",
-        total_copies=total,
-        available_copies=available,
+def _book(total: int = 2, available: int = 2, **overrides) -> Book:
+    fields = {
+        "title": "Clean Code",
+        "author": "Robert C. Martin",
+        "isbn": "978-0-13-235088-4",
+        "total_copies": total,
+        "available_copies": available,
+    } | overrides
+    return Book(**fields)
+
+
+@pytest.fixture
+def seeded_session(db_session):
+    """A session holding books 1 and 2 and borrowers 1 and 2; loans need real parents."""
+    db_session.add_all(
+        [
+            _book(id=1, isbn="9780000000001"),
+            _book(id=2, isbn="9780000000002"),
+            Borrower(id=1, name="Alice", email="alice@example.com"),
+            Borrower(id=2, name="Bob", email="bob@example.com"),
+        ]
     )
+    db_session.flush()
+    return db_session
 
 
 # ---------------------------------------------------------------------------
@@ -64,32 +80,45 @@ def test_available_copies_within_zero_to_total_is_accepted(db_session, total, av
 # ---------------------------------------------------------------------------
 
 
-def test_second_active_loan_for_same_book_and_borrower_is_rejected(db_session):
-    db_session.add(Loan(book_id=1, borrower_id=1))
-    db_session.flush()
+def test_second_active_loan_for_same_book_and_borrower_is_rejected(seeded_session):
+    seeded_session.add(Loan(book_id=1, borrower_id=1))
+    seeded_session.flush()
 
-    db_session.add(Loan(book_id=1, borrower_id=1))
+    seeded_session.add(Loan(book_id=1, borrower_id=1))
 
     with pytest.raises(IntegrityError):
-        db_session.flush()
+        seeded_session.flush()
 
 
-def test_different_borrowers_may_hold_the_same_book(db_session):
-    db_session.add_all([Loan(book_id=1, borrower_id=1), Loan(book_id=1, borrower_id=2)])
+def test_different_borrowers_may_hold_the_same_book(seeded_session):
+    seeded_session.add_all([Loan(book_id=1, borrower_id=1), Loan(book_id=1, borrower_id=2)])
 
-    db_session.flush()
-
-
-def test_same_borrower_may_hold_different_books(db_session):
-    db_session.add_all([Loan(book_id=1, borrower_id=1), Loan(book_id=2, borrower_id=1)])
-
-    db_session.flush()
+    seeded_session.flush()
 
 
-def test_borrower_may_borrow_again_once_the_previous_loan_is_returned(db_session):
-    db_session.add(Loan(book_id=1, borrower_id=1, returned_at=datetime.now(UTC)))
-    db_session.flush()
+def test_same_borrower_may_hold_different_books(seeded_session):
+    seeded_session.add_all([Loan(book_id=1, borrower_id=1), Loan(book_id=2, borrower_id=1)])
 
-    db_session.add(Loan(book_id=1, borrower_id=1))
+    seeded_session.flush()
 
-    db_session.flush()
+
+def test_borrower_may_borrow_again_once_the_previous_loan_is_returned(seeded_session):
+    seeded_session.add(Loan(book_id=1, borrower_id=1, returned_at=datetime.now(UTC)))
+    seeded_session.flush()
+
+    seeded_session.add(Loan(book_id=1, borrower_id=1))
+
+    seeded_session.flush()
+
+
+# ---------------------------------------------------------------------------
+# loans: foreign keys (SQLite enforces them only because app.database enables the pragma)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("book_id, borrower_id", [(99, 1), (1, 99)])
+def test_loan_must_reference_an_existing_book_and_borrower(seeded_session, book_id, borrower_id):
+    seeded_session.add(Loan(book_id=book_id, borrower_id=borrower_id))
+
+    with pytest.raises(IntegrityError):
+        seeded_session.flush()
