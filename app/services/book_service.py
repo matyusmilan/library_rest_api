@@ -4,12 +4,11 @@ from sqlalchemy.orm import Session
 from app.exceptions import (
     BookAlreadyBorrowedError,
     BookNotFoundError,
-    BorrowerNotFoundError,
     DuplicateIsbnError,
 )
 from app.models.book import Book
-from app.models.borrower import Borrower
 from app.schemas.book import BookCreate
+from app.services.borrower_service import get_borrower
 
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
@@ -41,31 +40,28 @@ def create_book(db: Session, data: BookCreate) -> Book:
     return book
 
 
-def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
-    """
-    Borrow a book by marking it as borrowed and linking it to a borrower.
+def _get_available_book(db: Session, book_id: int) -> Book:
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if book is None:
+        raise BookNotFoundError(book_id)
+    if book.is_borrowed:
+        raise BookAlreadyBorrowedError(book_id)
+    return book
 
-    A span wraps the entire operation so we can observe latency and errors
-    for the most critical write path in the system. The borrow counter is
-    incremented only on success, so dashboards always reflect real activity.
+
+def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
+    """Mark a book as borrowed by the given borrower.
+
+    The span covers the whole write path so latency and failures are visible
+    per outcome (a raised domain error marks the span as ERROR). The counter
+    is incremented only on success, so dashboards reflect real borrows.
     """
     with tracer.start_as_current_span("book.borrow") as span:
         span.set_attribute("book.id", book_id)
         span.set_attribute("borrower.id", borrower_id)
 
-        book = db.query(Book).filter(Book.id == book_id).first()
-        if not book:
-            span.set_attribute("error", True)
-            raise BookNotFoundError(book_id)
-
-        if book.is_borrowed:
-            span.set_attribute("error", True)
-            raise BookAlreadyBorrowedError(book_id)
-
-        borrower = db.query(Borrower).filter(Borrower.id == borrower_id).first()
-        if not borrower:
-            span.set_attribute("error", True)
-            raise BorrowerNotFoundError(borrower_id)
+        book = _get_available_book(db, book_id)
+        get_borrower(db, borrower_id)
 
         book.is_borrowed = True
         book.borrower_id = borrower_id
