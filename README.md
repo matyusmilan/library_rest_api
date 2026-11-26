@@ -89,7 +89,7 @@ uv run pytest tests/unit/ -v
 # Integration tests only (full HTTP stack, in-memory SQLite)
 uv run pytest tests/integration/ -v
 
-# All tests with coverage report
+# All tests with coverage report (fails below 90%, branch coverage on)
 uv run pytest --cov=app --cov-report=term-missing
 ```
 

@@ -1,6 +1,6 @@
 # Test Suite Documentation
 
-This document describes all 71 test cases organised by type and area.
+This document describes all 73 test cases organised by type and area.
 Run the full suite with:
 
 ```bash
@@ -41,6 +41,15 @@ real database or network is involved. They are fast and deterministic.
 | `test_get_borrowed_books_returns_list` | Returns the list of books borrowed by a borrower |
 | `test_get_borrowed_books_empty` | Returns an empty list when borrower has no books |
 | `test_get_borrowed_books_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
+
+### Database Dependency (`tests/unit/test_database.py`)
+
+Integration tests override `get_db`, so these are the only tests that run the real dependency.
+
+| Test | What it verifies |
+|---|---|
+| `test_get_db_yields_session_and_closes_it` | Yields a session and closes it when the request finishes |
+| `test_get_db_closes_session_when_request_fails` | Closes the session even when the request raises |
 
 ---
 
@@ -174,3 +183,17 @@ uv run bandit -r app/ -c pyproject.toml
 Bandit checks for common Python security issues including hardcoded credentials,
 insecure random number generators, SQL string concatenation, and unsafe
 deserialization. Current baseline: **0 findings**.
+
+---
+
+## Coverage
+
+Branch coverage is enabled and the build fails below **90%** (`[tool.coverage.report] fail_under`).
+
+```bash
+uv run pytest --cov=app --cov-report=term-missing
+```
+
+Business logic (services, routers, schemas, exceptions) is at 100%. The remaining gap is
+`configure_otel()` in `app/main.py`: tests deliberately run without telemetry, because the
+console exporters start background threads that outlive the test session.
