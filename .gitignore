@@ -25,6 +25,7 @@ htmlcov/
 
 # SQLite database files
 *.db
+*.db.bak
 *.sqlite3
 
 # Environment variables
