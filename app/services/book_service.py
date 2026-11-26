@@ -1,12 +1,19 @@
+from datetime import UTC, datetime
+
 from opentelemetry import metrics, trace
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.exceptions import (
-    BookAlreadyBorrowedError,
+    AlreadyBorrowedByBorrowerError,
     BookNotFoundError,
     DuplicateIsbnError,
+    LoanNotFoundError,
+    NoCopiesAvailableError,
 )
 from app.models.book import Book
+from app.models.loan import Loan
 from app.schemas.book import BookCreate
 from app.services.borrower_service import get_borrower
 
@@ -45,17 +52,41 @@ def create_book(db: Session, data: BookCreate) -> Book:
     return book
 
 
-def _get_available_book(db: Session, book_id: int) -> Book:
+def _get_book(db: Session, book_id: int) -> Book:
     book = db.query(Book).filter(Book.id == book_id).first()
     if book is None:
         raise BookNotFoundError(book_id)
-    if book.is_borrowed:
-        raise BookAlreadyBorrowedError(book_id)
     return book
 
 
+def _open_loan(db: Session, book_id: int, borrower_id: int) -> None:
+    """Insert an active loan; the partial unique index rejects a second one per borrower."""
+    db.add(Loan(book_id=book_id, borrower_id=borrower_id))
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise AlreadyBorrowedByBorrowerError(book_id, borrower_id) from None
+
+
+def _take_copy(db: Session, book_id: int) -> None:
+    """Atomically decrement available copies; fails if none are left."""
+    result = db.execute(
+        update(Book)
+        .where(Book.id == book_id, Book.available_copies > 0)
+        .values(available_copies=Book.available_copies - 1)
+    )
+    if result.rowcount == 0:
+        db.rollback()
+        raise NoCopiesAvailableError(book_id)
+
+
 def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
-    """Mark a book as borrowed by the given borrower.
+    """Lend one copy of a book to a borrower.
+
+    Copies are interchangeable, so a borrower is linked to the title, and may
+    hold only one copy of it at a time. The loan insert and the copy decrement
+    commit together or not at all.
 
     The span covers the whole write path so latency and failures are visible
     per outcome (a raised domain error marks the span as ERROR). The counter
@@ -65,11 +96,11 @@ def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
         span.set_attribute("book.id", book_id)
         span.set_attribute("borrower.id", borrower_id)
 
-        book = _get_available_book(db, book_id)
+        book = _get_book(db, book_id)
         get_borrower(db, borrower_id)
 
-        book.is_borrowed = True
-        book.borrower_id = borrower_id
+        _open_loan(db, book_id, borrower_id)
+        _take_copy(db, book_id)
         db.commit()
         db.refresh(book)
 
@@ -77,3 +108,32 @@ def borrow_book(db: Session, book_id: int, borrower_id: int) -> Book:
         span.set_attribute("book.title", book.title)
 
         return book
+
+
+def return_book(db: Session, book_id: int, borrower_id: int) -> Book:
+    """Take back the borrower's copy and make it available again.
+
+    Closing the loan is conditional on it still being active, so a repeated
+    return fails instead of incrementing the available copies twice.
+    """
+    book = _get_book(db, book_id)
+    get_borrower(db, borrower_id)
+
+    closed = db.execute(
+        update(Loan)
+        .where(
+            Loan.book_id == book_id,
+            Loan.borrower_id == borrower_id,
+            Loan.returned_at.is_(None),
+        )
+        .values(returned_at=datetime.now(UTC))
+    )
+    if closed.rowcount == 0:
+        raise LoanNotFoundError(book_id, borrower_id)
+
+    db.execute(
+        update(Book).where(Book.id == book_id).values(available_copies=Book.available_copies + 1)
+    )
+    db.commit()
+    db.refresh(book)
+    return book

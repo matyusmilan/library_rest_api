@@ -36,11 +36,6 @@ class DuplicateEmailError(ConflictError):
         super().__init__(f"A borrower with email '{email}' already exists.")
 
 
-class BookAlreadyBorrowedError(ConflictError):
-    def __init__(self, book_id: int):
-        super().__init__(f"Book with id {book_id} is already borrowed.")
-
-
 class NoCopiesAvailableError(ConflictError):
     def __init__(self, book_id: int):
         super().__init__(f"No copies of book with id {book_id} are available.")

@@ -43,7 +43,7 @@ class BookResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class BorrowRequest(BaseModel):
-    """Request body for borrowing a book."""
+class LoanRequest(BaseModel):
+    """Request body identifying the borrower for a borrow or return."""
 
     borrower_id: int = Field(..., gt=0, examples=[1])

@@ -66,22 +66,23 @@ def test_get_borrower_not_found_raises_not_found(mock_db):
 # ---------------------------------------------------------------------------
 
 
-def test_get_borrowed_books_returns_list(mock_db):
-    books = [
-        make_book(is_borrowed=True, borrower_id=1),
-        make_book(id=2, isbn="000", is_borrowed=True, borrower_id=1),
-    ]
-    borrower = make_borrower(borrowed_books=books)
+def _stub_active_loan_books(mock_db, borrower, books):
+    """Stub the borrower lookup and the join query over active loans."""
     mock_db.query.return_value.filter.return_value.first.return_value = borrower
+    mock_db.query.return_value.join.return_value.filter.return_value.all.return_value = books
+
+
+def test_get_borrowed_books_returns_books_from_active_loans(mock_db):
+    books = [make_book(id=1, available_copies=0), make_book(id=2, isbn="000", available_copies=0)]
+    _stub_active_loan_books(mock_db, make_borrower(), books)
 
     result = get_borrowed_books(mock_db, borrower_id=1)
 
-    assert len(result) == 2
+    assert result == books
 
 
 def test_get_borrowed_books_empty(mock_db):
-    borrower = make_borrower(borrowed_books=[])
-    mock_db.query.return_value.filter.return_value.first.return_value = borrower
+    _stub_active_loan_books(mock_db, make_borrower(), [])
 
     result = get_borrowed_books(mock_db, borrower_id=1)
 

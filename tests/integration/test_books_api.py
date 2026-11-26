@@ -66,8 +66,6 @@ def test_create_book_returns_201_with_book(client: TestClient):
     body = response.json()
     assert body["title"] == BOOK_PAYLOAD["title"]
     assert body["isbn"] == BOOK_PAYLOAD["isbn"]
-    assert body["is_borrowed"] is False
-    assert body["borrower_id"] is None
 
 
 def test_create_book_defaults_to_single_available_copy(client: TestClient):
@@ -111,8 +109,8 @@ def test_borrow_book_success(client: TestClient):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["is_borrowed"] is True
-    assert body["borrower_id"] == borrower["id"]
+    assert body["total_copies"] == 1
+    assert body["available_copies"] == 0
 
 
 def test_borrow_book_not_found_returns_404(client: TestClient):
@@ -123,7 +121,7 @@ def test_borrow_book_not_found_returns_404(client: TestClient):
     assert response.status_code == 404
 
 
-def test_borrow_book_already_borrowed_returns_409(client: TestClient):
+def test_borrow_book_twice_by_same_borrower_returns_409(client: TestClient):
     book = _create_book(client)
     borrower = _create_borrower(client)
     client.post(f"/books/{book['id']}/borrow", json={"borrower_id": borrower["id"]})

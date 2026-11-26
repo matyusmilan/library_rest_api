@@ -108,7 +108,7 @@ def test_get_borrowed_books_returns_borrowed_book(client: TestClient):
     books = response.json()
     assert len(books) == 1
     assert books[0]["id"] == book["id"]
-    assert books[0]["is_borrowed"] is True
+    assert books[0]["available_copies"] == 0
 
 
 def test_get_borrowed_books_borrower_not_found_returns_404(client: TestClient):

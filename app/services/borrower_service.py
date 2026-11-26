@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.exceptions import BorrowerNotFoundError, DuplicateEmailError
 from app.models.book import Book
 from app.models.borrower import Borrower
+from app.models.loan import Loan
 from app.schemas.borrower import BorrowerCreate
 
 
@@ -28,5 +29,10 @@ def get_borrower(db: Session, borrower_id: int) -> Borrower:
 
 def get_borrowed_books(db: Session, borrower_id: int) -> list[Book]:
     """Return the books a borrower currently has. Raises BorrowerNotFoundError if missing."""
-    borrower = get_borrower(db, borrower_id)
-    return borrower.borrowed_books
+    get_borrower(db, borrower_id)
+    return (
+        db.query(Book)
+        .join(Loan, Loan.book_id == Book.id)
+        .filter(Loan.borrower_id == borrower_id, Loan.returned_at.is_(None))
+        .all()
+    )

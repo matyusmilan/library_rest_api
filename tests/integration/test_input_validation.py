@@ -162,7 +162,7 @@ def test_book_isbn_special_characters_returns_422(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
-# BorrowRequest – borrower_id boundaries
+# LoanRequest – borrower_id boundaries
 # ---------------------------------------------------------------------------
 
 
@@ -180,6 +180,13 @@ def test_borrow_borrower_id_one_is_valid_gt_constraint(client: TestClient):
     # borrower_id=1 satisfies gt=0; borrower doesn't exist → 404, not 422
     book = _create_book(client, {**VALID_BOOK, "isbn": "9780306406157", "title": "Borrow gt test"})
     assert client.post(f"/books/{book['id']}/borrow", json={"borrower_id": 1}).status_code == 404
+
+
+@pytest.mark.parametrize("borrower_id", [0, -1])
+def test_return_borrower_id_not_positive_returns_422(client: TestClient, borrower_id: int):
+    book = _create_book(client, {**VALID_BOOK, "isbn": "0-306-40615-2", "title": "Return gt test"})
+    response = client.post(f"/books/{book['id']}/return", json={"borrower_id": borrower_id})
+    assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------

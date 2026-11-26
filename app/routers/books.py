@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.book import BookCreate, BookResponse, BorrowRequest
+from app.schemas.book import BookCreate, BookResponse, LoanRequest
 from app.services import book_service
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -30,9 +30,25 @@ def create_book(data: BookCreate, db: Session = Depends(get_db)) -> BookResponse
     response_model=BookResponse,
     summary="Borrow a book",
 )
-def borrow_book(book_id: int, body: BorrowRequest, db: Session = Depends(get_db)) -> BookResponse:
+def borrow_book(book_id: int, body: LoanRequest, db: Session = Depends(get_db)) -> BookResponse:
     """
-    Mark a book as borrowed by a given borrower.
-    Returns 404 if the book or borrower does not exist, 409 if the book is already borrowed.
+    Lend one copy of the book to the borrower.
+
+    Returns 404 if the book or borrower does not exist. Returns 409 if no copy is
+    available, or if the borrower already holds a copy of this book.
     """
     return book_service.borrow_book(db, book_id, body.borrower_id)
+
+
+@router.post(
+    "/{book_id}/return",
+    response_model=BookResponse,
+    summary="Return a borrowed book",
+)
+def return_book(book_id: int, body: LoanRequest, db: Session = Depends(get_db)) -> BookResponse:
+    """
+    Take back the borrower's copy and make it available again.
+
+    Returns 404 if the book, the borrower or the borrower's active loan does not exist.
+    """
+    return book_service.return_book(db, book_id, body.borrower_id)
