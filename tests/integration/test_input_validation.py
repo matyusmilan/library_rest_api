@@ -9,6 +9,7 @@ below and at the limit — rather than relying on typical happy-path values.
 All tests use the shared TestClient fixture from conftest.py.
 """
 
+import pytest
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -73,6 +74,25 @@ def test_book_author_at_max_length_returns_201(client: TestClient):
 
 def test_book_author_exceeds_max_length_returns_422(client: TestClient):
     payload = {**VALID_BOOK, "author": "B" * 256}
+    assert client.post("/books/", json=payload).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# BookCreate – total_copies boundaries (1..1000)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("copies", [1, 5, 1000])
+def test_book_total_copies_within_range_returns_201(client: TestClient, copies: int):
+    payload = {**VALID_BOOK, "total_copies": copies}
+    response = client.post("/books/", json=payload)
+    assert response.status_code == 201
+    assert response.json()["total_copies"] == copies
+
+
+@pytest.mark.parametrize("copies", [0, -1, 1001, 2.5, "three", None])
+def test_book_total_copies_out_of_range_or_invalid_returns_422(client: TestClient, copies):
+    payload = {**VALID_BOOK, "total_copies": copies}
     assert client.post("/books/", json=payload).status_code == 422
 
 

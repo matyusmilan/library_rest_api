@@ -62,6 +62,19 @@ def test_create_book_success(mock_db):
     assert added_book.isbn == data.isbn
 
 
+def test_create_book_makes_all_copies_available(mock_db):
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+    data = BookCreate(
+        title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4", total_copies=5
+    )
+
+    create_book(mock_db, data)
+
+    added_book = mock_db.add.call_args[0][0]
+    assert added_book.total_copies == 5
+    assert added_book.available_copies == 5
+
+
 def test_create_book_duplicate_isbn_raises_conflict(mock_db):
     mock_db.query.return_value.filter.return_value.first.return_value = make_book()
     data = BookCreate(title="Clean Code", author="Robert C. Martin", isbn="978-0-13-235088-4")

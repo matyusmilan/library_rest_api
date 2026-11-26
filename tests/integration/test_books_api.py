@@ -70,6 +70,20 @@ def test_create_book_returns_201_with_book(client: TestClient):
     assert body["borrower_id"] is None
 
 
+def test_create_book_defaults_to_single_available_copy(client: TestClient):
+    body = client.post("/books/", json=BOOK_PAYLOAD).json()
+
+    assert body["total_copies"] == 1
+    assert body["available_copies"] == 1
+
+
+def test_create_book_with_multiple_copies_makes_all_available(client: TestClient):
+    body = client.post("/books/", json={**BOOK_PAYLOAD, "total_copies": 5}).json()
+
+    assert body["total_copies"] == 5
+    assert body["available_copies"] == 5
+
+
 def test_create_book_duplicate_isbn_returns_409(client: TestClient):
     _create_book(client)
 

@@ -13,6 +13,7 @@ class BookCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, examples=["The Pragmatic Programmer"])
     author: str = Field(..., min_length=1, max_length=255, examples=["David Thomas"])
     isbn: str = Field(..., examples=["978-0-13-595705-9"])
+    total_copies: int = Field(1, ge=1, le=1000, examples=[5])
 
     @field_validator("isbn")
     @classmethod
@@ -34,6 +35,8 @@ class BookResponse(BaseModel):
     title: str
     author: str
     isbn: str
+    total_copies: int
+    available_copies: int
     is_borrowed: bool
     borrower_id: int | None
 

@@ -32,7 +32,13 @@ def create_book(db: Session, data: BookCreate) -> Book:
     existing = db.query(Book).filter(Book.isbn == data.isbn).first()
     if existing:
         raise DuplicateIsbnError(data.isbn)
-    book = Book(title=data.title, author=data.author, isbn=data.isbn)
+    book = Book(
+        title=data.title,
+        author=data.author,
+        isbn=data.isbn,
+        total_copies=data.total_copies,
+        available_copies=data.total_copies,
+    )
     db.add(book)
     db.commit()
     db.refresh(book)

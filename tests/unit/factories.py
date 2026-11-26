@@ -17,6 +17,8 @@ def make_book(**kwargs) -> Book:
         title="Clean Code",
         author="Robert C. Martin",
         isbn="978-0-13-235088-4",
+        total_copies=1,
+        available_copies=1,
         is_borrowed=False,
         borrower_id=None,
     )
