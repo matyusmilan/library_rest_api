@@ -9,7 +9,12 @@ import pytest
 
 from app.exceptions import BorrowerNotFoundError, DuplicateEmailError
 from app.schemas.borrower import BorrowerCreate
-from app.services.borrower_service import create_borrower, get_borrowed_books, get_borrower
+from app.services.borrower_service import (
+    create_borrower,
+    get_borrowed_books,
+    get_borrower,
+    list_borrowers,
+)
 from tests.unit.factories import make_book, make_borrower
 
 # ---------------------------------------------------------------------------
@@ -37,6 +42,23 @@ def test_create_borrower_duplicate_email_raises_conflict(mock_db):
         create_borrower(mock_db, data)
 
     mock_db.add.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# list_borrowers
+# ---------------------------------------------------------------------------
+
+
+def test_list_borrowers_returns_the_requested_page(mock_db):
+    borrowers = [make_borrower(id=1), make_borrower(id=2, email="b@example.com")]
+    ordered = mock_db.query.return_value.order_by.return_value
+    ordered.limit.return_value.offset.return_value.all.return_value = borrowers
+
+    result = list_borrowers(mock_db, limit=10, offset=20)
+
+    assert result == borrowers
+    ordered.limit.assert_called_once_with(10)
+    ordered.limit.return_value.offset.assert_called_once_with(20)
 
 
 # ---------------------------------------------------------------------------

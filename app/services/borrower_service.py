@@ -19,6 +19,11 @@ def create_borrower(db: Session, data: BorrowerCreate) -> Borrower:
     return borrower
 
 
+def list_borrowers(db: Session, limit: int, offset: int) -> list[Borrower]:
+    # Ordering by id keeps pages stable between requests.
+    return db.query(Borrower).order_by(Borrower.id).limit(limit).offset(offset).all()
+
+
 def get_borrower(db: Session, borrower_id: int) -> Borrower:
     """Return a borrower by ID. Raises BorrowerNotFoundError if missing."""
     borrower = db.query(Borrower).filter(Borrower.id == borrower_id).first()

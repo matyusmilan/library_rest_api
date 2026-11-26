@@ -130,3 +130,36 @@ def test_limit_of_100_is_accepted(client: TestClient):
 @pytest.mark.parametrize("url", BOOK_LISTS)
 def test_invalid_pagination_returns_422(client: TestClient, url: str, query: str):
     assert client.get(f"{url}?{query}").status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /borrowers/
+# ---------------------------------------------------------------------------
+
+
+def test_borrowers_list_is_empty_on_a_fresh_library(client: TestClient):
+    assert client.get("/borrowers/").json() == []
+
+
+def test_borrowers_list_returns_everyone_in_id_order(client: TestClient):
+    created = [_create_borrower(client, n)["id"] for n in range(1, 4)]
+
+    assert _ids(client, "/borrowers/") == created
+
+
+def test_borrowers_limit_and_offset_select_a_page(client: TestClient):
+    created = [_create_borrower(client, n)["id"] for n in range(1, 6)]
+
+    assert _ids(client, "/borrowers/?limit=2&offset=2") == created[2:4]
+
+
+def test_borrowers_default_page_size_is_50(client: TestClient):
+    for n in range(1, 52):
+        _create_borrower(client, n)
+
+    assert len(_ids(client, "/borrowers/")) == 50
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=101", "limit=abc", "offset=-1", "offset=x"])
+def test_borrowers_invalid_pagination_returns_422(client: TestClient, query: str):
+    assert client.get(f"/borrowers/?{query}").status_code == 422

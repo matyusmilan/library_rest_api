@@ -2,11 +2,20 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.routers.pagination import Pagination, pagination
 from app.schemas.book import BookResponse
 from app.schemas.borrower import BorrowerCreate, BorrowerResponse
 from app.services import borrower_service
 
 router = APIRouter(prefix="/borrowers", tags=["borrowers"])
+
+
+@router.get("/", response_model=list[BorrowerResponse], summary="List all borrowers")
+def list_borrowers(
+    page: Pagination = Depends(pagination), db: Session = Depends(get_db)
+) -> list[BorrowerResponse]:
+    """Return the registered borrowers, ordered by ID."""
+    return borrower_service.list_borrowers(db, page.limit, page.offset)
 
 
 @router.post(
