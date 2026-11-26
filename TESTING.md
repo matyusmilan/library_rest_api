@@ -11,7 +11,9 @@ uv run pytest -v
 
 ## Unit Tests — Service Layer
 
-These tests target the business logic in `app/services/` in isolation.
+These tests target the business logic in `app/services/` in isolation. Services raise
+domain exceptions (`app/exceptions.py`); the HTTP status mapping is covered by the
+integration tests.
 The database session is replaced with a `MagicMock(spec=Session)`, so no
 real database or network is involved. They are fast and deterministic.
 
@@ -22,23 +24,23 @@ real database or network is involved. They are fast and deterministic.
 | `test_list_books_returns_all` | Returns all books from the DB query |
 | `test_list_books_empty` | Returns an empty list when no books exist |
 | `test_create_book_success` | Adds a book and calls `add`, `commit`, `refresh` |
-| `test_create_book_duplicate_isbn_raises_409` | Raises HTTP 409 if the ISBN already exists |
+| `test_create_book_duplicate_isbn_raises_conflict` | Raises `DuplicateIsbnError` if the ISBN already exists |
 | `test_borrow_book_success` | Marks book as borrowed, links borrower, increments OTel counter |
-| `test_borrow_book_not_found_raises_404` | Raises HTTP 404 when book ID does not exist |
-| `test_borrow_book_already_borrowed_raises_409` | Raises HTTP 409 when book is already borrowed |
-| `test_borrow_book_borrower_not_found_raises_404` | Raises HTTP 404 when borrower ID does not exist |
+| `test_borrow_book_not_found_raises_not_found` | Raises `BookNotFoundError` when the book ID does not exist |
+| `test_borrow_book_already_borrowed_raises_conflict` | Raises `BookAlreadyBorrowedError` when the book is already borrowed |
+| `test_borrow_book_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
 
 ### Borrower Service (`tests/unit/test_borrower_service.py`)
 
 | Test | What it verifies |
 |---|---|
 | `test_create_borrower_success` | Adds a borrower and calls `add`, `commit` |
-| `test_create_borrower_duplicate_email_raises_409` | Raises HTTP 409 if the email already exists |
+| `test_create_borrower_duplicate_email_raises_conflict` | Raises `DuplicateEmailError` if the email already exists |
 | `test_get_borrower_success` | Returns the correct borrower by ID |
-| `test_get_borrower_not_found_raises_404` | Raises HTTP 404 when borrower ID does not exist |
+| `test_get_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
 | `test_get_borrowed_books_returns_list` | Returns the list of books borrowed by a borrower |
 | `test_get_borrowed_books_empty` | Returns an empty list when borrower has no books |
-| `test_get_borrowed_books_borrower_not_found_raises_404` | Raises HTTP 404 when borrower ID does not exist |
+| `test_get_borrowed_books_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
 
 ---
 

@@ -130,6 +130,8 @@ library/
 ├── app/
 │   ├── main.py              # FastAPI app entry point, OTel setup
 │   ├── database.py          # SQLAlchemy engine and session
+│   ├── exceptions.py        # Domain exceptions raised by the services
+│   ├── error_handlers.py    # Maps domain exceptions to HTTP 404/409 responses
 │   ├── models/
 │   │   ├── book.py          # Book ORM model
 │   │   └── borrower.py      # Borrower ORM model
