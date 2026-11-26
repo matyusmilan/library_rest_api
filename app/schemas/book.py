@@ -37,8 +37,6 @@ class BookResponse(BaseModel):
     isbn: str
     total_copies: int
     available_copies: int
-    is_borrowed: bool
-    borrower_id: int | None
 
     model_config = {"from_attributes": True}
 

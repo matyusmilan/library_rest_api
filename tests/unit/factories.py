@@ -19,8 +19,6 @@ def make_book(**kwargs) -> Book:
         isbn="978-0-13-235088-4",
         total_copies=1,
         available_copies=1,
-        is_borrowed=False,
-        borrower_id=None,
     )
     return Book(**{**defaults, **kwargs})
 
@@ -30,6 +28,5 @@ def make_borrower(**kwargs) -> Borrower:
         id=1,
         name="Alice",
         email="alice@example.com",
-        borrowed_books=[],
     )
     return Borrower(**{**defaults, **kwargs})

@@ -68,6 +68,12 @@ def test_create_book_returns_201_with_book(client: TestClient):
     assert body["isbn"] == BOOK_PAYLOAD["isbn"]
 
 
+def test_book_response_exposes_copy_counts_not_a_borrowed_flag(client: TestClient):
+    body = client.post("/books/", json=BOOK_PAYLOAD).json()
+
+    assert set(body) == {"id", "title", "author", "isbn", "total_copies", "available_copies"}
+
+
 def test_create_book_defaults_to_single_available_copy(client: TestClient):
     body = client.post("/books/", json=BOOK_PAYLOAD).json()
 

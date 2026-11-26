@@ -11,8 +11,4 @@ class Borrower(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 
-    borrowed_books: Mapped[list["Book"]] = relationship(  # noqa: F821
-        "Book", back_populates="borrower"
-    )
-
     loans: Mapped[list["Loan"]] = relationship("Loan", back_populates="borrower")  # noqa: F821
