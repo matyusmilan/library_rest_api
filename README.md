@@ -48,12 +48,16 @@ The SQLite database file (`library.db`) is created automatically in the project 
 | `GET` | `/books/` | List every book in the library |
 | `GET` | `/books/available` | List books with at least one copy available to borrow |
 | `GET` | `/books/{book_id}` | Get one book |
+| `PATCH` | `/books/{book_id}` | Change the title, author, ISBN or total copies |
+| `DELETE` | `/books/{book_id}` | Delete a book (`204`) |
 | `POST` | `/books/` | Add a new book (`201`, `Location` header) |
 | `POST` | `/books/{book_id}/borrow` | Borrow a copy of a book |
 | `POST` | `/books/{book_id}/return` | Return a borrowed copy |
 | `GET` | `/borrowers/` | List borrowers |
 | `POST` | `/borrowers/` | Register a new borrower (`201`, `Location` header) |
 | `GET` | `/borrowers/{borrower_id}` | Get borrower details |
+| `PATCH` | `/borrowers/{borrower_id}` | Change the name or email |
+| `DELETE` | `/borrowers/{borrower_id}` | Delete a borrower (`204`) |
 | `GET` | `/borrowers/{borrower_id}/books` | List borrower's borrowed books |
 
 All list endpoints take `limit` (1-100, default 50) and `offset` (default 0) and return items
@@ -106,6 +110,8 @@ not individual copies.
 | One copy per title per borrower | A borrower may hold **at most one copy of a given title at a time**. A second borrow of the same title returns `409`. The same borrower can borrow *different* titles, and can borrow the title again after returning it. |
 | Borrow | `404` if the book or borrower does not exist. `409` if the borrower already holds a copy, or if no copy is available. |
 | Return | Closes the borrower's active loan and frees one copy. `404` if the book, the borrower or the borrower's active loan does not exist. Returning twice returns `404`. |
+| Update | `PATCH` takes only the fields to change: at least one, none of them `null`. `409` if the ISBN or email belongs to someone else. Changing `total_copies` moves `available_copies` by the same amount, and returns `409` if the new total is below the copies currently on loan. When any part fails, nothing is changed. |
+| Delete | Returns `204`, and the returned-loan history is deleted with the record. `409` while a copy of the book is on loan, or while the borrower holds a book. |
 | Invariant | `available_copies == total_copies - active loans`, always. |
 | Not covered yet | Due dates and late returns. A loan records `borrowed_at` and `returned_at` only. |
 

@@ -1,6 +1,6 @@
 # Test Suite Documentation
 
-This document describes all 154 test cases organised by type and area.
+This document describes all 224 test cases organised by type and area.
 Run the full suite with:
 
 ```bash
@@ -38,6 +38,16 @@ real database or network is involved. They are fast and deterministic.
 | `test_return_book_without_active_loan_raises_not_found` | Raises `LoanNotFoundError`; the copies are not incremented |
 | `test_return_book_book_not_found_raises_not_found` | Raises `BookNotFoundError` |
 | `test_return_book_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` |
+| `test_borrow_book_deleted_while_borrowing_raises_not_found` | The loan insert hits the foreign key because the book or borrower was just deleted: reports `BookNotFoundError` or `BorrowerNotFoundError`, not a false "already borrowed" conflict |
+| `test_update_book_changes_only_the_sent_fields` | Unsent fields stay; the stock is not touched |
+| `test_update_book_isbn_owned_by_another_book_raises_conflict` | Raises `DuplicateIsbnError`, no commit |
+| `test_update_book_free_isbn_is_applied` | An unused ISBN is written |
+| `test_update_book_total_copies_runs_one_conditional_update` | Resizing is a single conditional `UPDATE` |
+| `test_update_book_total_copies_below_loans_raises_conflict_and_rolls_back` | Raises `TotalCopiesBelowLoansError` and discards the other pending changes too |
+| `test_update_book_not_found_raises_not_found` | Raises `BookNotFoundError` |
+| `test_delete_book_removes_history_then_book_and_commits` | Deletes returned loans, then the book, one commit |
+| `test_delete_book_with_copies_on_loan_raises_conflict_and_rolls_back` | Raises `BookHasActiveLoansError` and undoes the history delete |
+| `test_delete_book_not_found_raises_not_found` | Raises `BookNotFoundError`, nothing is executed |
 
 ### Borrower Service (`tests/unit/test_borrower_service.py`)
 
@@ -51,6 +61,22 @@ real database or network is involved. They are fast and deterministic.
 | `test_get_borrowed_books_returns_books_from_active_loans` | Returns the books of the borrower's active loans |
 | `test_get_borrowed_books_empty` | Returns an empty list when the borrower has no active loans |
 | `test_get_borrowed_books_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
+| `test_update_borrower_changes_only_the_sent_fields` | Unsent fields stay |
+| `test_update_borrower_email_owned_by_another_raises_conflict` | Raises `DuplicateEmailError`, no commit |
+| `test_update_borrower_free_email_is_applied` | An unused email is written |
+| `test_update_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` |
+| `test_delete_borrower_removes_history_then_borrower_and_commits` | Deletes returned loans, then the borrower, one commit |
+| `test_delete_borrower_holding_a_book_raises_conflict_and_rolls_back` | Raises `BorrowerHasActiveLoansError` and undoes the history delete |
+| `test_delete_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError`, nothing is executed |
+
+### PATCH bodies (`tests/unit/test_patch_schemas.py`)
+
+| Test | What it verifies |
+|---|---|
+| `test_book_update_accepts_a_single_field` | One field is enough, and only it is reported as set |
+| `test_book_update_rejects_an_empty_body` / `test_borrower_update_rejects_an_empty_body` | `{}` is rejected: at least one field is required |
+| `test_book_update_rejects_a_null_field` / `test_borrower_update_rejects_a_null_field` | A sent `null` is rejected for every field (it would be ambiguous) |
+| `test_book_update_applies_the_same_field_rules_as_create` / `test_borrower_update_applies_the_same_field_rules_as_create` | Invalid ISBN, name or email, and out-of-range `total_copies` are rejected as on create |
 
 ### Database Dependency (`tests/unit/test_database.py`)
 
@@ -125,6 +151,36 @@ one copy left. All list endpoints share `limit` (1-100, default 50) and `offset`
 | `test_borrowers_limit_and_offset_select_a_page` | `/borrowers/` | Paging works |
 | `test_borrowers_default_page_size_is_50` | `/borrowers/` | 51 borrowers yield 50 items |
 | `test_borrowers_invalid_pagination_returns_422` | `/borrowers/` | Same invalid values rejected |
+
+### Update and delete (`tests/integration/test_update_delete_api.py`)
+
+| Test | Endpoint | Expected | What it verifies |
+|---|---|---|---|
+| `test_patch_book_changes_only_the_sent_fields` | `PATCH /books/{id}` | 200 | Other fields keep their values |
+| `test_patch_book_isbn_of_another_book_returns_409` | `PATCH /books/{id}` | 409 | The ISBN stays unchanged |
+| `test_patch_book_with_its_own_isbn_is_not_a_conflict` | `PATCH /books/{id}` | 200 | Re-sending the current ISBN is fine |
+| `test_patch_book_to_a_new_isbn` | `PATCH /books/{id}` | 200 | ISBN is replaced |
+| `test_patch_book_with_an_invalid_body_returns_422` | `PATCH /books/{id}` | 422 | `{}`, `null`, empty title, bad ISBN, `total_copies` 0, 1001, `"many"` |
+| `test_patch_unknown_book_returns_404` | `PATCH /books/{id}` | 404 | Non-existent ID |
+| `test_patch_total_copies_up_makes_the_new_copies_available` | `PATCH /books/{id}` | 200 | 1 → 4 copies gives 4 available |
+| `test_patch_total_copies_keeps_the_copies_on_loan_out_of_stock` | `PATCH /books/{id}` | 200 | 3 copies, 2 on loan: total 5 gives 3 available; total 2 gives 0 available |
+| `test_patch_total_copies_below_the_loans_returns_409_and_changes_nothing` | `PATCH /books/{id}` | 409 | A title change sent together with the rejected total is rolled back |
+| `test_delete_book_returns_204_and_removes_it` | `DELETE /books/{id}` | 204 | Empty body; the book disappears from `GET` and the list |
+| `test_delete_unknown_book_returns_404` / `test_delete_book_twice_returns_404_the_second_time` | `DELETE /books/{id}` | 404 | Non-existent ID, repeated delete |
+| `test_delete_book_with_a_copy_on_loan_returns_409_and_keeps_everything` | `DELETE /books/{id}` | 409 | The book and the borrower's loan are untouched |
+| `test_delete_book_after_every_copy_is_returned_succeeds` | `DELETE /books/{id}` | 204 | The loan history goes with it (foreign keys would reject the delete otherwise) |
+| `test_delete_book_leaves_other_loans_untouched` | `DELETE /books/{id}` | 204 | Loans of other books survive |
+| `test_patch_borrower_changes_only_the_sent_fields` | `PATCH /borrowers/{id}` | 200 | Other fields keep their values |
+| `test_patch_borrower_email_of_another_borrower_returns_409` | `PATCH /borrowers/{id}` | 409 | The email stays unchanged |
+| `test_patch_borrower_with_its_own_email_is_not_a_conflict` | `PATCH /borrowers/{id}` | 200 | Re-sending the current email is fine |
+| `test_patch_borrower_to_a_new_email` | `PATCH /borrowers/{id}` | 200 | Email is replaced |
+| `test_patch_borrower_with_an_invalid_body_returns_422` | `PATCH /borrowers/{id}` | 422 | `{}`, `null`, empty name, malformed email |
+| `test_patch_unknown_borrower_returns_404` | `PATCH /borrowers/{id}` | 404 | Non-existent ID |
+| `test_delete_borrower_returns_204_and_removes_them` | `DELETE /borrowers/{id}` | 204 | Empty body; gone from `GET` and the list |
+| `test_delete_unknown_borrower_returns_404` | `DELETE /borrowers/{id}` | 404 | Non-existent ID |
+| `test_delete_borrower_holding_a_book_returns_409_and_keeps_the_loan` | `DELETE /borrowers/{id}` | 409 | The borrower and the lent copy are untouched |
+| `test_delete_borrower_after_returning_everything_succeeds` | `DELETE /borrowers/{id}` | 204 | History goes with them; the copy count is unchanged |
+| `test_delete_borrower_leaves_other_borrowers_loans_untouched` | `DELETE /borrowers/{id}` | 204 | Loans of other borrowers survive |
 
 ### Lending: copies, borrow and return (`tests/integration/test_lending_api.py`)
 
