@@ -1,6 +1,6 @@
 # Test Suite Documentation
 
-This document describes all 162 test cases organised by type and area.
+This document describes all 154 test cases organised by type and area.
 Run the full suite with:
 
 ```bash
@@ -105,23 +105,21 @@ using FastAPI's `TestClient` backed by a fresh in-memory SQLite database per tes
 
 ### Listing and pagination (`tests/integration/test_listing_api.py`)
 
-`GET /books/all` returns every book. `GET /books/available` returns only books with at least
-one copy left. `GET /books/` is an alias of `/books/all`. All list endpoints share `limit`
-(1-100, default 50) and `offset`, and order by ID.
+`GET /books/` returns every book. `GET /books/available` returns only books with at least
+one copy left. All list endpoints share `limit` (1-100, default 50) and `offset`, and order by ID.
 
 | Test | Endpoint | What it verifies |
 |---|---|---|
-| `test_all_lists_every_book_including_fully_borrowed_ones` | `/books/all` | Books with no copy left are still listed |
+| `test_books_lists_every_book_including_fully_borrowed_ones` | `/books/` | Books with no copy left are still listed |
 | `test_available_excludes_books_with_no_copy_left` | `/books/available` | Fully borrowed books are left out |
 | `test_available_includes_a_book_with_some_copies_still_free` | `/books/available` | 2 copies, 1 borrowed: still listed |
 | `test_returned_book_is_available_again` | `/books/available` | A return puts the book back on the list |
 | `test_available_is_empty_on_a_fresh_library` | `/books/available` | Empty list, not an error |
-| `test_books_root_is_an_alias_of_all` | `/books/` | Same body as `/books/all` (also proves `/all` is not captured by `/{book_id}`) |
-| `test_limit_and_offset_select_a_page_in_id_order` | all three book lists | Pages follow ID order and do not overlap |
-| `test_offset_past_the_end_returns_an_empty_page` | all three book lists | Empty list, not an error |
-| `test_default_page_size_is_50` | `/books/all` | 51 books yield 50 items |
-| `test_limit_of_100_is_accepted` | `/books/all` | Upper boundary of `limit` |
-| `test_invalid_pagination_returns_422` | all three book lists | `limit` 0, 101, `abc` and `offset` -1, `x` rejected |
+| `test_limit_and_offset_select_a_page_in_id_order` | both book lists | Pages follow ID order and do not overlap |
+| `test_offset_past_the_end_returns_an_empty_page` | both book lists | Empty list, not an error |
+| `test_default_page_size_is_50` | `/books/` | 51 books yield 50 items |
+| `test_limit_of_100_is_accepted` | `/books/` | Upper boundary of `limit` |
+| `test_invalid_pagination_returns_422` | both book lists | `limit` 0, 101, `abc` and `offset` -1, `x` rejected |
 | `test_borrowers_list_is_empty_on_a_fresh_library` | `/borrowers/` | Empty list |
 | `test_borrowers_list_returns_everyone_in_id_order` | `/borrowers/` | All borrowers, ordered by ID |
 | `test_borrowers_limit_and_offset_select_a_page` | `/borrowers/` | Paging works |

@@ -45,7 +45,7 @@ The SQLite database file (`library.db`) is created automatically in the project 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/books/all` | List every book in the library (`/books/` is an alias) |
+| `GET` | `/books/` | List every book in the library |
 | `GET` | `/books/available` | List books with at least one copy available to borrow |
 | `GET` | `/books/{book_id}` | Get one book |
 | `POST` | `/books/` | Add a new book (`201`, `Location` header) |
