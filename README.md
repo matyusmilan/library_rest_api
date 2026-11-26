@@ -45,13 +45,19 @@ The SQLite database file (`library.db`) is created automatically in the project 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/books/` | List all books |
-| `POST` | `/books/` | Add a new book |
+| `GET` | `/books/all` | List every book in the library (`/books/` is an alias) |
+| `GET` | `/books/available` | List books with at least one copy available to borrow |
+| `GET` | `/books/{book_id}` | Get one book |
+| `POST` | `/books/` | Add a new book (`201`, `Location` header) |
 | `POST` | `/books/{book_id}/borrow` | Borrow a copy of a book |
 | `POST` | `/books/{book_id}/return` | Return a borrowed copy |
-| `POST` | `/borrowers/` | Register a new borrower |
+| `GET` | `/borrowers/` | List borrowers |
+| `POST` | `/borrowers/` | Register a new borrower (`201`, `Location` header) |
 | `GET` | `/borrowers/{borrower_id}` | Get borrower details |
 | `GET` | `/borrowers/{borrower_id}/books` | List borrower's borrowed books |
+
+All list endpoints take `limit` (1-100, default 50) and `offset` (default 0) and return items
+ordered by ID, for example `GET /books/available?limit=10&offset=20`. Invalid values return `422`.
 
 ### Example requests
 

@@ -1,6 +1,6 @@
 # Test Suite Documentation
 
-This document describes all 114 test cases organised by type and area.
+This document describes all 162 test cases organised by type and area.
 Run the full suite with:
 
 ```bash
@@ -21,8 +21,11 @@ real database or network is involved. They are fast and deterministic.
 
 | Test | What it verifies |
 |---|---|
-| `test_list_books_returns_all` | Returns all books from the DB query |
+| `test_list_books_returns_the_requested_page` | Orders by ID and applies the given `limit` and `offset` |
 | `test_list_books_empty` | Returns an empty list when no books exist |
+| `test_list_available_books_filters_on_available_copies` | Applies the `available_copies > 0` filter before paging |
+| `test_get_book_returns_the_book` | Returns the book with the given ID |
+| `test_get_book_not_found_raises_not_found` | Raises `BookNotFoundError` when the book ID does not exist |
 | `test_create_book_success` | Adds a book and calls `add`, `commit`, `refresh` |
 | `test_create_book_makes_all_copies_available` | A new book starts with `available_copies == total_copies` |
 | `test_create_book_duplicate_isbn_raises_conflict` | Raises `DuplicateIsbnError` if the ISBN already exists |
@@ -42,6 +45,7 @@ real database or network is involved. They are fast and deterministic.
 |---|---|
 | `test_create_borrower_success` | Adds a borrower and calls `add`, `commit` |
 | `test_create_borrower_duplicate_email_raises_conflict` | Raises `DuplicateEmailError` if the email already exists |
+| `test_list_borrowers_returns_the_requested_page` | Orders by ID and applies the given `limit` and `offset` |
 | `test_get_borrower_success` | Returns the correct borrower by ID |
 | `test_get_borrower_not_found_raises_not_found` | Raises `BorrowerNotFoundError` when the borrower ID does not exist |
 | `test_get_borrowed_books_returns_books_from_active_loans` | Returns the books of the borrower's active loans |
@@ -74,7 +78,10 @@ using FastAPI's `TestClient` backed by a fresh in-memory SQLite database per tes
 | `test_book_response_exposes_copy_counts_not_a_borrowed_flag` | `POST /books/` | 201 | Response has exactly `id`, `title`, `author`, `isbn`, `total_copies`, `available_copies` |
 | `test_create_book_defaults_to_single_available_copy` | `POST /books/` | 201 | Omitted `total_copies` means one copy, available |
 | `test_create_book_with_multiple_copies_makes_all_available` | `POST /books/` | 201 | `total_copies: 5` gives `available_copies: 5` |
+| `test_create_book_sets_location_header_to_the_new_book` | `POST /books/` | 201 | `Location` is `/books/{id}` and resolves to the created book |
 | `test_create_book_duplicate_isbn_returns_409` | `POST /books/` | 409 | Duplicate ISBN rejected |
+| `test_get_book_returns_the_book` | `GET /books/{id}` | 200 | Returns the same body the create call returned |
+| `test_get_book_not_found_returns_404` | `GET /books/{id}` | 404 | Non-existent ID rejected |
 | `test_create_book_missing_field_returns_422` | `POST /books/` | 422 | Missing required field rejected |
 | `test_borrow_book_success` | `POST /books/{id}/borrow` | 200 | Single-copy book ends with `available_copies == 0` |
 | `test_borrow_book_not_found_returns_404` | `POST /books/{id}/borrow` | 404 | Non-existent book ID rejected |
@@ -86,6 +93,7 @@ using FastAPI's `TestClient` backed by a fresh in-memory SQLite database per tes
 | Test | Endpoint | Expected | What it verifies |
 |---|---|---|---|
 | `test_create_borrower_returns_201_with_borrower` | `POST /borrowers/` | 201 | Response body contains correct fields |
+| `test_create_borrower_sets_location_header_to_the_new_borrower` | `POST /borrowers/` | 201 | `Location` is `/borrowers/{id}` and resolves to the created borrower |
 | `test_create_borrower_duplicate_email_returns_409` | `POST /borrowers/` | 409 | Duplicate email rejected |
 | `test_create_borrower_invalid_email_returns_422` | `POST /borrowers/` | 422 | Malformed email rejected |
 | `test_create_borrower_missing_name_returns_422` | `POST /borrowers/` | 422 | Missing required field rejected |
@@ -94,6 +102,31 @@ using FastAPI's `TestClient` backed by a fresh in-memory SQLite database per tes
 | `test_get_borrowed_books_empty` | `GET /borrowers/{id}/books` | 200 `[]` | Empty list when no books borrowed |
 | `test_get_borrowed_books_returns_borrowed_book` | `GET /borrowers/{id}/books` | 200 `[…]` | Returns the borrowed book with correct fields |
 | `test_get_borrowed_books_borrower_not_found_returns_404` | `GET /borrowers/{id}/books` | 404 | Non-existent borrower returns 404 |
+
+### Listing and pagination (`tests/integration/test_listing_api.py`)
+
+`GET /books/all` returns every book. `GET /books/available` returns only books with at least
+one copy left. `GET /books/` is an alias of `/books/all`. All list endpoints share `limit`
+(1-100, default 50) and `offset`, and order by ID.
+
+| Test | Endpoint | What it verifies |
+|---|---|---|
+| `test_all_lists_every_book_including_fully_borrowed_ones` | `/books/all` | Books with no copy left are still listed |
+| `test_available_excludes_books_with_no_copy_left` | `/books/available` | Fully borrowed books are left out |
+| `test_available_includes_a_book_with_some_copies_still_free` | `/books/available` | 2 copies, 1 borrowed: still listed |
+| `test_returned_book_is_available_again` | `/books/available` | A return puts the book back on the list |
+| `test_available_is_empty_on_a_fresh_library` | `/books/available` | Empty list, not an error |
+| `test_books_root_is_an_alias_of_all` | `/books/` | Same body as `/books/all` (also proves `/all` is not captured by `/{book_id}`) |
+| `test_limit_and_offset_select_a_page_in_id_order` | all three book lists | Pages follow ID order and do not overlap |
+| `test_offset_past_the_end_returns_an_empty_page` | all three book lists | Empty list, not an error |
+| `test_default_page_size_is_50` | `/books/all` | 51 books yield 50 items |
+| `test_limit_of_100_is_accepted` | `/books/all` | Upper boundary of `limit` |
+| `test_invalid_pagination_returns_422` | all three book lists | `limit` 0, 101, `abc` and `offset` -1, `x` rejected |
+| `test_borrowers_list_is_empty_on_a_fresh_library` | `/borrowers/` | Empty list |
+| `test_borrowers_list_returns_everyone_in_id_order` | `/borrowers/` | All borrowers, ordered by ID |
+| `test_borrowers_limit_and_offset_select_a_page` | `/borrowers/` | Paging works |
+| `test_borrowers_default_page_size_is_50` | `/borrowers/` | 51 borrowers yield 50 items |
+| `test_borrowers_invalid_pagination_returns_422` | `/borrowers/` | Same invalid values rejected |
 
 ### Lending: copies, borrow and return (`tests/integration/test_lending_api.py`)
 
@@ -130,6 +163,7 @@ them as the last line of defence under concurrent requests.
 | `test_different_borrowers_may_hold_the_same_book` | The index does not block other borrowers |
 | `test_same_borrower_may_hold_different_books` | The index does not block other titles |
 | `test_borrower_may_borrow_again_once_the_previous_loan_is_returned` | Returned loans are outside the index |
+| `test_loan_must_reference_an_existing_book_and_borrower` | Foreign keys are enforced: an unknown book or borrower is rejected (`PRAGMA foreign_keys=ON` is set in `app/database.py`) |
 
 ---
 
